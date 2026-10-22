@@ -124,25 +124,24 @@ class DreamTalesCoreTest {
 
     @Test
     fun testLyricSentencePacing() {
-        val storyContent = "天黑了，小星星打了个哈欠。森林里的小动物都睡着了！晚安，做个好梦。"
-        val raw = storyContent.split(Regex("(?<=[。！？\n])")).map { it.trim() }.filter { it.isNotEmpty() }
-        assertEquals(3, raw.size)
-        assertEquals("天黑了，小星星打了个哈欠。", raw[0])
-        assertEquals("森林里的小动物都睡着了！", raw[1])
-        assertEquals("晚安，做个好梦。", raw[2])
+        val storyContent = "天黑了，小星星打了个哈欠。森林里的小动物都睡着了！水牛伯伯说：‘明天见。’晚安，做个好梦。"
+        val sentences = com.bedtime.dreamtales.core.StorySpeechHelper.parseStorySentences(storyContent)
+        assertEquals(4, sentences.size)
+        assertEquals("天黑了，小星星打了个哈欠。", sentences[0])
+        assertEquals("森林里的小动物都睡着了！", sentences[1])
+        assertEquals("水牛伯伯说：‘明天见。’", sentences[2])
+        assertEquals("晚安，做个好梦。", sentences[3])
 
-        val totalChars = raw.sumOf { it.length }.coerceAtLeast(1)
-        var cumulative = 0
-        val intervals = raw.map { text ->
-            val start = cumulative
-            cumulative += text.length
-            val end = cumulative
-            Triple(text, start.toFloat() / totalChars, end.toFloat() / totalChars)
-        }
+        val intervals = com.bedtime.dreamtales.core.StorySpeechHelper.calculateLyricIntervals(sentences)
+        assertEquals(4, intervals.size)
+        assertEquals(0f, intervals[0].startFraction, 0.001f)
+        assertEquals(1f, intervals.last().endFraction, 0.001f)
+        assertTrue("首句结束时间应当等于第二句开始时间", intervals[0].endFraction == intervals[1].startFraction)
 
-        assertEquals(0f, intervals[0].second, 0.001f)
-        assertEquals(1f, intervals.last().third, 0.001f)
-        assertTrue("首句结束时间应当小于第二句开始", intervals[0].third <= intervals[1].second + 0.001f)
+        // 测试进度映射索引
+        assertEquals(0, com.bedtime.dreamtales.core.StorySpeechHelper.getActiveSentenceIndex(0.01f, intervals))
+        assertEquals(1, com.bedtime.dreamtales.core.StorySpeechHelper.getActiveSentenceIndex(intervals[1].startFraction + 0.01f, intervals))
+        assertEquals(3, com.bedtime.dreamtales.core.StorySpeechHelper.getActiveSentenceIndex(0.99f, intervals))
     }
 
     @Test

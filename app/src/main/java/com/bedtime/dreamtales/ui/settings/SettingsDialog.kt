@@ -78,11 +78,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsDialog(
     currentThemeMode: String,
-    currentPlaybackMode: PlaybackMode,
     cacheSizeMb: Float,
     cacheCount: Int,
     onThemeModeSelected: (String) -> Unit,
-    onPlaybackModeSelected: (PlaybackMode) -> Unit,
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
     onClearCacheClick: () -> Unit,
@@ -154,50 +152,7 @@ fun SettingsDialog(
                     }
                 }
 
-                // 2. 播放模式选择
-                SettingSectionCard(title = "🎧 连播模式偏好") {
-                    val playbackOptions = listOf(
-                        Triple(PlaybackMode.SEQUENTIAL, "🔀 顺序连播 (推荐)", "播完当前故事后，平滑开播下一篇"),
-                        Triple(PlaybackMode.REPEAT_ONE, "🔁 单曲循环", "一篇故事反复循环，适合固定听特定故事入睡"),
-                        Triple(PlaybackMode.STOP_AFTER_CURRENT, "⏹️ 播完即止", "当前故事播完后即刻安静停播")
-                    )
-                    playbackOptions.forEach { (mode, name, desc) ->
-                        val isSelected = currentPlaybackMode == mode
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.small)
-                                .clickable { onPlaybackModeSelected(mode) }
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { onPlaybackModeSelected(mode) },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = name,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                                Text(
-                                    text = desc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 3. 数据备份与书单导入导出
+                // 2. 数据备份与书单导入导出
                 SettingSectionCard(title = "📚 故事书单数据管理") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

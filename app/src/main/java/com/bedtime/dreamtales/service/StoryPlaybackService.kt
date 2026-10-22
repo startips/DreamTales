@@ -473,7 +473,7 @@ class StoryPlaybackService : MediaSessionService() {
                         totalDurationMs = max(0L, exoPlayer.duration)
                     )
                 }
-                delay(500L)
+                delay(100L) // 平滑且高频追踪朗读进度（100ms 毫秒级声画同步）
             }
         }
     }

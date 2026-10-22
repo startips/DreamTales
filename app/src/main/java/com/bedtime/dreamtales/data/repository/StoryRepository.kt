@@ -81,6 +81,17 @@ class StoryRepository(private val context: Context) {
         }
     }
 
+    suspend fun cleanLegacyAudioCaches() = withContext(Dispatchers.IO) {
+        val audioDir = File(context.filesDir, "audio_caches")
+        if (!audioDir.exists()) return@withContext
+        // 清理旧版本中无 hash 的遗留音频文件，确保音频与当前包含开场白的文本完全对齐
+        audioDir.listFiles()?.forEach { file ->
+            if (file.name.matches(Regex("story_\\d+_voice_\\d+\\.wav"))) {
+                file.delete()
+            }
+        }
+    }
+
     suspend fun ensureClassicStoriesPopulated() = withContext(Dispatchers.IO) {
         val count = storyDao.getStoryCount()
         if (count < 11) {
@@ -94,8 +105,13 @@ class StoryRepository(private val context: Context) {
     suspend fun preCacheUpcomingStories(voiceProfile: VoiceProfile) = withContext(Dispatchers.IO) {
         val all = storyDao.getAllStoriesSync()
         for (story in all.take(3)) {
+            val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
+            val contentHash = spokenStoryText.hashCode().toUInt().toString(16)
+            val audioDir = File(context.filesDir, "audio_caches")
+            val targetFile = File(audioDir, "story_${story.id}_voice_${voiceProfile.id}_$contentHash.wav")
+
             val existing = cacheDao.getCache(story.id, voiceProfile.id)
-            if (existing == null || !existing.isComplete || !File(existing.localFilePath).exists()) {
+            if (existing == null || !existing.isComplete || !File(existing.localFilePath).exists() || existing.localFilePath != targetFile.absolutePath) {
                 try {
                     getOrSynthesizeStoryAudio(story, voiceProfile) { /* silent */ }
                     delay(3000L)
@@ -114,23 +130,30 @@ class StoryRepository(private val context: Context) {
         voiceProfile: VoiceProfile,
         onProgress: (Int) -> Unit = {}
     ): String = withContext(Dispatchers.IO) {
-        // 1. 检查本地沙盒中是否已有该故事与音色的合成缓存
+        val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
+        val contentHash = spokenStoryText.hashCode().toUInt().toString(16)
+
+        // 1. 准备沙盒目标存储路径（文件名包含文本哈希，确保文本与语音严格一致）
+        val audioDir = File(context.filesDir, "audio_caches")
+        if (!audioDir.exists()) audioDir.mkdirs()
+
+        val targetFile = File(audioDir, "story_${story.id}_voice_${voiceProfile.id}_$contentHash.wav")
+
+        // 2. 检查本地沙盒中是否已有该故事与音色的合成缓存（且确保哈希版本严格一致）
         val existingCache = cacheDao.getCache(story.id, voiceProfile.id)
         if (existingCache != null && existingCache.isComplete) {
             val file = File(existingCache.localFilePath)
-            if (file.exists() && file.length() > 0) {
+            if (file.exists() && file.length() > 0 && file.absolutePath == targetFile.absolutePath) {
                 onProgress(100)
                 return@withContext file.absolutePath
+            } else {
+                // 如果旧文件是旧文本生成的（例如未包含开场白），安全清理旧文件与旧记录
+                file.delete()
+                cacheDao.deleteCache(story.id, voiceProfile.id)
             }
         }
 
         onProgress(10)
-
-        // 2. 准备沙盒目标存储路径
-        val audioDir = File(context.filesDir, "audio_caches")
-        if (!audioDir.exists()) audioDir.mkdirs()
-
-        val targetFile = File(audioDir, "story_${story.id}_voice_${voiceProfile.id}.wav")
 
         // 3. 互斥队列防并发与排队执行合成（小米 MiMo 免费高速合成）
         synthesisMutex.withLock {
@@ -138,7 +161,7 @@ class StoryRepository(private val context: Context) {
             val doubleCheck = cacheDao.getCache(story.id, voiceProfile.id)
             if (doubleCheck != null && doubleCheck.isComplete) {
                 val cachedFile = File(doubleCheck.localFilePath)
-                if (cachedFile.exists() && cachedFile.length() > 0) {
+                if (cachedFile.exists() && cachedFile.length() > 0 && cachedFile.absolutePath == targetFile.absolutePath) {
                     onProgress(100)
                     return@withContext cachedFile.absolutePath
                 }

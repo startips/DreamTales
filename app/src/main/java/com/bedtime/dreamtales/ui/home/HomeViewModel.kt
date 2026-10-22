@@ -110,6 +110,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             storyRepository.ensureClassicStoriesPopulated()
+            storyRepository.cleanLegacyAudioCaches()
             voiceRepository.insertPresetVoiceIfEmpty()
             val voice = voiceRepository.getDefaultVoiceProfileSync()
             if (voice != null) {

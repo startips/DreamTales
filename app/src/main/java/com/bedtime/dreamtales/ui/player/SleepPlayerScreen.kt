@@ -85,6 +85,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.constants.AppConstants
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
 import com.bedtime.dreamtales.service.FlipSensorManager
@@ -510,27 +511,19 @@ private fun StoryLyricsComponent(
     }
 
     val sentenceList = remember(content) {
-        val raw = content.split(Regex("(?<=[。！？\n])")).map { it.trim() }.filter { it.isNotEmpty() }
-        val totalChars = raw.sumOf { it.length }.coerceAtLeast(1)
-        var cumulative = 0
-        raw.map { text ->
-            val start = cumulative
-            cumulative += text.length
-            val end = cumulative
-            Triple(text, start.toFloat() / totalChars, end.toFloat() / totalChars)
-        }
+        val parsed = StorySpeechHelper.parseStorySentences(content)
+        StorySpeechHelper.calculateLyricIntervals(parsed)
     }
 
     val progressFraction = if (totalDurationMs > 0) (currentPositionMs.toFloat() / totalDurationMs).coerceIn(0f, 1f) else 0f
     val activeIndex = remember(progressFraction, sentenceList) {
-        val idx = sentenceList.indexOfFirst { progressFraction >= it.second && progressFraction <= it.third }
-        if (idx >= 0) idx else if (progressFraction >= 0.98f) sentenceList.lastIndex else 0
+        StorySpeechHelper.getActiveSentenceIndex(progressFraction, sentenceList)
     }
 
     val listState = rememberLazyListState()
 
     LaunchedEffect(activeIndex) {
-        if (sentenceList.isNotEmpty() && activeIndex >= 0) {
+        if (sentenceList.isNotEmpty() && activeIndex in sentenceList.indices) {
             listState.animateScrollToItem(max(0, activeIndex - 1))
         }
     }
@@ -557,14 +550,14 @@ private fun StoryLyricsComponent(
                         else Color.Transparent
                     )
                     .clickable {
-                        val seekTarget = (item.second * totalDurationMs).toLong()
+                        val seekTarget = (item.startFraction * totalDurationMs).toLong()
                         onSeekTo(seekTarget)
                     }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = item.first,
+                    text = item.text,
                     style = if (isCurrent) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
                     color = when {
                         isCurrent -> MaterialTheme.colorScheme.primary

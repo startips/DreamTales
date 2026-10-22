@@ -717,14 +717,10 @@ fun HomeScreen(
     if (showSettingsDialog) {
         SettingsDialog(
             currentThemeMode = themeMode,
-            currentPlaybackMode = playbackState.playbackMode,
             cacheSizeMb = cacheSizeMb,
             cacheCount = cacheCount,
             onThemeModeSelected = { mode ->
                 viewModel.setThemeMode(mode)
-            },
-            onPlaybackModeSelected = { mode ->
-                viewModel.setPlaybackMode(mode)
             },
             onOpenExport = {
                 showSettingsDialog = false
