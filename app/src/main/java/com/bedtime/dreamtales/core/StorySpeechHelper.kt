@@ -6,6 +6,13 @@ data class LyricSentence(
     val endFraction: Float
 )
 
+data class ParsedStoryDraft(
+    val title: String,
+    val content: String,
+    val suggestedEmoji: String,
+    val estimatedDurationMinutes: Int
+)
+
 object StorySpeechHelper {
 
     private const val INTRO_KEYWORD = "我们要讲的故事是"
@@ -117,5 +124,75 @@ object StorySpeechHelper {
             }
         }
         return if (clampedProgress >= 0.98f) intervals.lastIndex else 0
+    }
+
+    /**
+     * 智能剪贴板文本识别：自动从杂糅文本中拆解故事标题、过滤前缀、提取正文、推荐题材 Emoji 并预估伴读耗时
+     */
+    fun parseClipboardToStoryDraft(rawText: String): ParsedStoryDraft {
+        val text = rawText.trim()
+        if (text.isBlank()) {
+            return ParsedStoryDraft(title = "", content = "", suggestedEmoji = "🌙", estimatedDurationMinutes = 1)
+        }
+
+        var title = ""
+        var content = text
+
+        // 1. 尝试匹配首行前部的书名号 《...》 或 【...】
+        val bookMatch = Regex("^[《【](.*?)[》】]").find(text)
+        if (bookMatch != null && bookMatch.groupValues[1].trim().isNotBlank()) {
+            title = bookMatch.groupValues[1].trim()
+            content = text.substring(bookMatch.value.length).trim()
+        } else {
+            // 2. 按行分割判断首行是否可做标题
+            val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+            if (lines.size > 1 && lines[0].length <= 25 && !lines[0].endsWith("。") && !lines[0].endsWith("！")) {
+                title = lines[0]
+                content = lines.drop(1).joinToString("\n\n")
+            } else if (lines.size == 1 && lines[0].length <= 20) {
+                title = lines[0]
+                content = ""
+            } else {
+                title = lines.firstOrNull()?.take(10)?.plus("的故事") ?: "我的睡前故事"
+                content = text
+            }
+        }
+
+        // 净化标题冗余前缀（如“睡前故事：”等）
+        title = title.replace(Regex("^(睡前故事|儿童故事|睡前童话|童话故事|故事)[:：\\s]*"), "").trim()
+
+        // 3. 语义化分析标题与正文关键词，自动推荐最生动的 Emoji
+        val full = (title + " " + content).lowercase()
+        val emoji = when {
+            full.contains("兔") || full.contains("萝卜") -> "🐰"
+            full.contains("鹿") -> "🦌"
+            full.contains("恐龙") || full.contains("霸王龙") -> "🦕"
+            full.contains("熊") -> "🐻"
+            full.contains("狐狸") -> "🦊"
+            full.contains("猫") -> "🐱"
+            full.contains("狗") -> "🐶"
+            full.contains("象") -> "🐘"
+            full.contains("狮") -> "🦁"
+            full.contains("马") || full.contains("独角兽") -> "🦄"
+            full.contains("鸟") || full.contains("天鹅") || full.contains("夜莺") || full.contains("鸽") -> "🕊️"
+            full.contains("鱼") || full.contains("海豚") || full.contains("鲸") -> "🐬"
+            full.contains("花") || full.contains("玫瑰") -> "🌸"
+            full.contains("公主") || full.contains("王子") || full.contains("城堡") || full.contains("国王") -> "👑"
+            full.contains("车") || full.contains("火车") -> "🚂"
+            full.contains("星") || full.contains("星星") -> "⭐"
+            full.contains("月亮") || full.contains("夜晚") || full.contains("梦") -> "🌙"
+            full.contains("气球") -> "🎈"
+            else -> "🌙"
+        }
+
+        val charCount = content.length
+        val estMin = (charCount / 220).coerceAtLeast(1)
+
+        return ParsedStoryDraft(
+            title = title,
+            content = content,
+            suggestedEmoji = emoji,
+            estimatedDurationMinutes = estMin
+        )
     }
 }

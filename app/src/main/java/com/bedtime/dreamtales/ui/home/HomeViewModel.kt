@@ -173,6 +173,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addCustomStory(
+        title: String,
+        content: String,
+        targetAge: String,
+        iconEmoji: String,
+        onSuccess: (Story) -> Unit
+    ) {
+        viewModelScope.launch {
+            val story = storyRepository.createCustomStory(
+                title = title,
+                content = content,
+                targetAge = targetAge,
+                iconEmoji = iconEmoji
+            )
+            onSuccess(story)
+        }
+    }
+
     fun selectVoiceProfile(profileId: Long) {
         viewModelScope.launch {
             voiceRepository.setDefaultVoiceProfile(profileId)

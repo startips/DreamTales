@@ -400,6 +400,34 @@ class StoryRepository(private val context: Context) {
     }
 
     /**
+     * 手动/智能粘贴录入新故事并持久化至 Room 文库
+     */
+    suspend fun createCustomStory(
+        title: String,
+        content: String,
+        targetAge: String = "3-6岁",
+        iconEmoji: String = "🌙"
+    ): Story = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim()
+        val cleanContent = content.trim()
+        val estimatedDuration = ((cleanContent.length / 3.5).toInt()).coerceIn(60, 600)
+        val newStory = Story(
+            title = cleanTitle,
+            targetAge = targetAge.ifBlank { "3-6岁" },
+            content = cleanContent,
+            durationSeconds = estimatedDuration,
+            isAiGenerated = false,
+            dateLabel = "自录收录",
+            iconEmoji = iconEmoji.ifBlank { "🌙" },
+            isFavorite = false,
+            playCount = 0,
+            createdAt = System.currentTimeMillis()
+        )
+        val id = storyDao.insertStory(newStory)
+        newStory.copy(id = id)
+    }
+
+    /**
      * 兼容接口：直接生成单篇故事
      */
     suspend fun searchOrGenerateStoryWithCpa(

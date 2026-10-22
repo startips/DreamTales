@@ -376,4 +376,27 @@ class DreamTalesCoreTest {
         assertEquals(1L, fallback.id)
         assertEquals("温柔月光 · 小米原生 (MiMo TTS)", fallback.name)
     }
+
+    @Test
+    fun testClipboardAutoParseStoryDraft() {
+        // 1. 书名号自动提取标题及 Emoji 匹配
+        val raw1 = "《月亮掉进烟囱里》\n从前，在一座静悄悄的红砖小镇上，天黑的时候，银色的月亮缓缓升起。"
+        val draft1 = com.bedtime.dreamtales.core.StorySpeechHelper.parseClipboardToStoryDraft(raw1)
+        assertEquals("月亮掉进烟囱里", draft1.title)
+        assertTrue("正文应不包含书名号行", !draft1.content.startsWith("《"))
+        assertTrue("正文应包含故事内容", draft1.content.contains("红砖小镇"))
+        assertEquals("月亮题材应匹配 🌙 图标", "🌙", draft1.suggestedEmoji)
+
+        // 2. 首行无书名号但为短句时自动提取标题
+        val raw2 = "睡前故事：小熊的萤火虫灯笼\n夜幕降临，森林里升起了雾气。小熊拿着一个小小的竹灯笼。"
+        val draft2 = com.bedtime.dreamtales.core.StorySpeechHelper.parseClipboardToStoryDraft(raw2)
+        assertEquals("小熊的萤火虫灯笼", draft2.title)
+        assertEquals("小熊题材应匹配 🐻 图标", "🐻", draft2.suggestedEmoji)
+
+        // 3. 恐龙题材匹配
+        val raw3 = "勇敢的小霸王龙\n在茂密的原始森林里，有一只小恐龙正在找妈妈。"
+        val draft3 = com.bedtime.dreamtales.core.StorySpeechHelper.parseClipboardToStoryDraft(raw3)
+        assertEquals("勇敢的小霸王龙", draft3.title)
+        assertEquals("恐龙题材应匹配 🦕 图标", "🦕", draft3.suggestedEmoji)
+    }
 }

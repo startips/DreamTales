@@ -61,6 +61,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -150,6 +151,7 @@ fun HomeScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showAddStoryDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -214,41 +216,74 @@ fun HomeScreen(
                         )
                     }
 
-                    // 右上角常规 APP 菜单体系
-                    Box {
-                        IconButton(onClick = { showTopMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "更多设置",
-                                tint = MaterialTheme.colorScheme.primary
+                    // 右上角操作区：录入童话快捷键 + 常规 APP 菜单体系
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(
+                            onClick = { showAddStoryDialog = true },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 11.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "录入童话",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
 
-                        DropdownMenu(
-                            expanded = showTopMenu,
-                            onDismissRequest = { showTopMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("⚙️ 伴读与数据设置") },
-                                onClick = {
-                                    showTopMenu = false
-                                    viewModel.refreshCacheInfo()
-                                    showSettingsDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("ℹ️ 关于 DreamTales") },
-                                onClick = {
-                                    showTopMenu = false
-                                    showAboutDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            )
+                        Spacer(modifier = Modifier.width(2.dp))
+
+                        Box {
+                            IconButton(onClick = { showTopMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "更多设置",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showTopMenu,
+                                onDismissRequest = { showTopMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("✍️ 手动/粘贴录入新故事") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showAddStoryDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("⚙️ 伴读与数据设置") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        viewModel.refreshCacheInfo()
+                                        showSettingsDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("ℹ️ 关于 DreamTales") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showAboutDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -410,6 +445,27 @@ fun HomeScreen(
                         // 灵感快捷推荐气泡
                         val quickSuggestions = listOf("九色鹿", "小红帽", "神笔马良", "森林小兔子", "月亮上的秋千")
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                SuggestionChip(
+                                    onClick = { showAddStoryDialog = true },
+                                    label = {
+                                        Text(
+                                            text = "✍️ 粘贴自录童话",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    },
+                                    shape = CircleShape,
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                        labelColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    border = SuggestionChipDefaults.suggestionChipBorder(
+                                        enabled = true,
+                                        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                    )
+                                )
+                            }
                             items(quickSuggestions) { tag ->
                                 SuggestionChip(
                                     onClick = {
@@ -846,6 +902,20 @@ fun HomeScreen(
     if (showAboutDialog) {
         AboutDialog(
             onDismiss = { showAboutDialog = false }
+        )
+    }
+
+    // 录入/粘贴新故事弹窗
+    if (showAddStoryDialog) {
+        AddStoryDialog(
+            onDismiss = { showAddStoryDialog = false },
+            onStoryAdded = { title, content, targetAge, iconEmoji ->
+                showAddStoryDialog = false
+                viewModel.addCustomStory(title, content, targetAge, iconEmoji) { newStory ->
+                    Toast.makeText(context, "已成功收录《${newStory.title}》！", Toast.LENGTH_SHORT).show()
+                    viewModel.onStoryClicked(newStory, onNavigateToPlayer)
+                }
+            }
         )
     }
 
