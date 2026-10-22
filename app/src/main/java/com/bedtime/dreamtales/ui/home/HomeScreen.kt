@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -93,6 +94,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -154,6 +156,8 @@ fun HomeScreen(
     var showTopMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var localSearchQuery by remember { mutableStateOf("") }
+    var selectedStoryToRead by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.Story?>(null) }
     var showAllStories by remember { mutableStateOf(false) }
     var voiceToDelete by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.VoiceProfile?>(null) }
     var recommendedStories by remember {
@@ -183,9 +187,28 @@ fun HomeScreen(
         }
     }
 
-    // 决定实际展示的故事列表（默认收拢展示前 5 篇，点击展开全部后再展示剩余）
-    val displayStories = remember(filteredAndSortedStories, showAllStories) {
-        if (showAllStories) filteredAndSortedStories else filteredAndSortedStories.take(5)
+    // 本地已存故事关键字实时过滤
+    val localFilteredStories = remember(filteredAndSortedStories, localSearchQuery) {
+        if (localSearchQuery.isBlank()) {
+            filteredAndSortedStories
+        } else {
+            val query = localSearchQuery.trim()
+            filteredAndSortedStories.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                it.content.contains(query, ignoreCase = true) ||
+                it.targetAge.contains(query, ignoreCase = true) ||
+                it.dateLabel.contains(query, ignoreCase = true)
+            }
+        }
+    }
+
+    // 决定实际展示的故事列表（未输入搜索词时默认收拢展示前 5 篇；搜索时展示全部匹配项）
+    val displayStories = remember(localFilteredStories, showAllStories, localSearchQuery) {
+        if (localSearchQuery.isNotBlank() || showAllStories) {
+            localFilteredStories
+        } else {
+            localFilteredStories.take(5)
+        }
     }
 
     Scaffold(
@@ -556,80 +579,155 @@ fun HomeScreen(
                 }
             }
 
-            // 2. 故事文库表头与多维排序气泡
+            // 2. 故事文库表头与多维排序气泡 + 本地故事快速搜索栏
             item(key = "story_header_and_sort_bar") {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 4.dp, bottom = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "🌙 睡前伴读文库",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest
-                        ) {
+                    // 第一行：文库标题 + 统计徽章 + 排序气泡
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "共 ${filteredAndSortedStories.size} 篇",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                text = "🌙 睡前伴读文库",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                    }
-
-                    // 多维排序下拉选择气泡
-                    Box {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.clickable { showSortMenu = true }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = if (localSearchQuery.isNotBlank()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
                             ) {
                                 Text(
-                                    text = sortOrder.label,
+                                    text = if (localSearchQuery.isNotBlank()) "找到 ${localFilteredStories.size} 篇" else "共 ${filteredAndSortedStories.size} 篇",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Medium
+                                    color = if (localSearchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (localSearchQuery.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(text = "▾", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                             }
                         }
 
-                        DropdownMenu(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false }
+                        // 多维排序下拉选择气泡
+                        Box {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.clickable { showSortMenu = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = sortOrder.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(text = "▾", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                StorySortOrder.values().forEach { order ->
+                                    val isSelected = (order == sortOrder)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = order.label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setSortOrder(order)
+                                            showSortMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 第二行：紧凑型本地故事搜索框
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(
+                            1.dp,
+                            if (localSearchQuery.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            StorySortOrder.values().forEach { order ->
-                                val isSelected = (order == sortOrder)
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = order.label,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setSortOrder(order)
-                                        showSortMenu = false
-                                    }
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = if (localSearchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (localSearchQuery.isEmpty()) {
+                                    Text(
+                                        text = "搜索本地故事标题、正文关键字...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                BasicTextField(
+                                    value = localSearchQuery,
+                                    onValueChange = { localSearchQuery = it },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                                    modifier = Modifier.fillMaxWidth()
                                 )
+                            }
+                            if (localSearchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { localSearchQuery = "" },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "清除搜索",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -649,6 +747,9 @@ fun HomeScreen(
                     isCurrentPlaying = isCurrentPlaying,
                     isSynthesizing = isSynthesizing,
                     synthesisProgress = synthesisProgress,
+                    onCardClick = {
+                        selectedStoryToRead = story
+                    },
                     onPlayClick = {
                         viewModel.onStoryClicked(story, onNavigateToPlayer)
                     },
@@ -658,8 +759,46 @@ fun HomeScreen(
                 )
             }
 
-            // 4. “浏览更多经典童话”折叠展开按键（总数超过5篇时显示）
-            if (filteredAndSortedStories.size > 5) {
+            // 本地故事搜索空状态提示
+            if (localSearchQuery.isNotBlank() && localFilteredStories.isEmpty()) {
+                item(key = "local_search_empty_state") {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "🔍", fontSize = 28.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "未在本地找到与“${localSearchQuery.trim()}”匹配的故事",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "可在上方云端搜索栏输入主题，由大模型为您生成全新童话",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. “浏览更多经典童话”折叠展开按键（总数超过5篇且未处于本地搜索时显示）
+            if (localSearchQuery.isBlank() && filteredAndSortedStories.size > 5) {
                 item(key = "toggle_more_stories_button") {
                     OutlinedButton(
                         onClick = { showAllStories = !showAllStories },
@@ -1115,6 +1254,21 @@ fun HomeScreen(
             onDismiss = { viewModel.cancelPreview() }
         )
     }
+
+    // 本地故事全文阅读弹窗（亲子朗读/点击卡片查看）
+    selectedStoryToRead?.let { story ->
+        StoryReaderDialog(
+            story = story,
+            onPlayClick = {
+                val storyToPlay = story
+                selectedStoryToRead = null
+                viewModel.onStoryClicked(storyToPlay, onNavigateToPlayer)
+            },
+            onDismiss = {
+                selectedStoryToRead = null
+            }
+        )
+    }
 }
 
 /**
@@ -1211,11 +1365,12 @@ private fun VerticalStoryCard(
     isCurrentPlaying: Boolean,
     isSynthesizing: Boolean,
     synthesisProgress: Int,
+    onCardClick: () -> Unit,
     onPlayClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
     OutlinedCard(
-        onClick = onPlayClick,
+        onClick = onCardClick,
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.outlinedCardColors(
             containerColor = if (isCurrentPlaying || isSynthesizing) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer

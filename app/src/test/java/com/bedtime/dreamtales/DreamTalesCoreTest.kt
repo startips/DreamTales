@@ -318,6 +318,69 @@ class DreamTalesCoreTest {
     }
 
     @Test
+    fun testLocalStoryFuzzySearchFilter() {
+        val s1 = com.bedtime.dreamtales.data.local.entity.Story(
+            id = 1,
+            title = "小马过河",
+            targetAge = "3-6岁",
+            content = "小马驮着半袋麦子，高兴地往磨坊跑去，一条小河挡住了去路。",
+            durationSeconds = 180,
+            dateLabel = "经典寓言"
+        )
+        val s2 = com.bedtime.dreamtales.data.local.entity.Story(
+            id = 2,
+            title = "月亮晚安",
+            targetAge = "1-3岁",
+            content = "在一间大大的绿色房间里，有只电话，还有一个红气球。",
+            durationSeconds = 120,
+            dateLabel = "睡前绘本"
+        )
+        val s3 = com.bedtime.dreamtales.data.local.entity.Story(
+            id = 3,
+            title = "小红帽与大灰狼",
+            targetAge = "4-7岁",
+            content = "森林深处住着外婆，小红帽提着蛋糕和葡萄酒走在小路上。",
+            durationSeconds = 240,
+            dateLabel = "格林童话"
+        )
+        val allStories = listOf(s1, s2, s3)
+
+        fun filterStories(query: String): List<com.bedtime.dreamtales.data.local.entity.Story> {
+            if (query.isBlank()) return allStories
+            val q = query.trim()
+            return allStories.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                it.content.contains(q, ignoreCase = true) ||
+                it.targetAge.contains(q, ignoreCase = true) ||
+                it.dateLabel.contains(q, ignoreCase = true)
+            }
+        }
+
+        // 1. 空搜索词应返回全部故事
+        assertEquals(3, filterStories("").size)
+        assertEquals(3, filterStories("   ").size)
+
+        // 2. 按标题搜索
+        val searchByTitle = filterStories("小马")
+        assertEquals(1, searchByTitle.size)
+        assertEquals("小马过河", searchByTitle[0].title)
+
+        // 3. 按正文内容关键字搜索
+        val searchByContent = filterStories("红气球")
+        assertEquals(1, searchByContent.size)
+        assertEquals("月亮晚安", searchByContent[0].title)
+
+        // 4. 按标签或年龄段搜索
+        val searchByTag = filterStories("格林童话")
+        assertEquals(1, searchByTag.size)
+        assertEquals("小红帽与大灰狼", searchByTag[0].title)
+
+        // 5. 不存在关键字返回空列表
+        val searchNonExistent = filterStories("恐龙特急克塞号")
+        assertTrue(searchNonExistent.isEmpty())
+    }
+
+    @Test
     fun testStoryBackupJsonPackageSerializationAndDeduplication() {
         val item1 = com.bedtime.dreamtales.data.repository.StoryExportItem(
             title = "小恐龙找妈妈",
