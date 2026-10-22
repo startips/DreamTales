@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -11,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -95,6 +97,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -114,6 +118,7 @@ import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.SettingsDialog
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * 遵循 Material Design 3 规范的主页文库。
@@ -1389,6 +1394,19 @@ private fun VerticalStoryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. 左侧童话睡前插画/徽章
+                val coverBitmap = remember(story.coverImagePath) {
+                    if (!story.coverImagePath.isNullOrBlank()) {
+                        val f = File(story.coverImagePath)
+                        if (f.exists() && f.length() > 0) {
+                            try {
+                                BitmapFactory.decodeFile(f.absolutePath)?.asImageBitmap()
+                            } catch (e: Exception) {
+                                null
+                            }
+                        } else null
+                    } else null
+                }
+
                 Box(
                     modifier = Modifier
                         .size(50.dp)
@@ -1403,10 +1421,19 @@ private fun VerticalStoryCard(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = getStoryEmoji(story),
-                        fontSize = 24.sp
-                    )
+                    if (coverBitmap != null) {
+                        Image(
+                            bitmap = coverBitmap,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = getStoryEmoji(story),
+                            fontSize = 24.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))

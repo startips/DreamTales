@@ -28,6 +28,9 @@ interface StoryDao {
     @Query("UPDATE stories SET isFavorite = :isFavorite WHERE id = :storyId")
     suspend fun setFavorite(storyId: Long, isFavorite: Boolean)
 
+    @Query("UPDATE stories SET coverImagePath = :coverImagePath WHERE id = :storyId")
+    suspend fun updateCoverImagePath(storyId: Long, coverImagePath: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStory(story: Story): Long
 

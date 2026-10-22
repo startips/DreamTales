@@ -60,6 +60,8 @@ data class StoryPlaybackState(
     val storyId: Long = 0L,
     val storyTitle: String = "",
     val storyContent: String = "",
+    val coverImagePath: String? = null,
+    val isGeneratingCover: Boolean = false,
     val isPlaying: Boolean = false,
     val currentPositionMs: Long = 0L,
     val totalDurationMs: Long = 0L,
@@ -249,11 +251,15 @@ class StoryPlaybackService : MediaSessionService() {
         applyAmbientVolume()
         updateVolumeState()
 
+        val existingCover = File(applicationContext.filesDir, "story_covers/cover_${storyId}.jpg")
+            .takeIf { it.exists() && it.length() > 0 }?.absolutePath
+
         updateState {
             it.copy(
                 storyId = storyId,
                 storyTitle = storyTitle,
                 storyContent = storyContent,
+                coverImagePath = existingCover,
                 currentSpeed = 1.0f,
                 isPlaying = autoPlay
             )
@@ -274,6 +280,14 @@ class StoryPlaybackService : MediaSessionService() {
         }
 
         updateNotification(storyTitle, isPlaying = autoPlay)
+    }
+
+    fun updateCoverImagePath(path: String?) {
+        updateState { it.copy(coverImagePath = path) }
+    }
+
+    fun setGeneratingCover(generating: Boolean) {
+        updateState { it.copy(isGeneratingCover = generating) }
     }
 
     fun togglePlayPause() {

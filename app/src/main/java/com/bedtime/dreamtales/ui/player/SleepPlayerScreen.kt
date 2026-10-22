@@ -1,6 +1,8 @@
 package com.bedtime.dreamtales.ui.player
 
 import android.app.Activity
+import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -16,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -48,7 +51,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -79,8 +84,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +98,7 @@ import com.bedtime.dreamtales.core.constants.AppConstants
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
 import com.bedtime.dreamtales.service.AmbientSound
 import com.bedtime.dreamtales.service.FlipSensorManager
+import java.io.File
 import kotlin.math.max
 
 /**
@@ -109,8 +117,9 @@ fun SleepPlayerScreen(
     val playbackState by viewModel.playbackState.collectAsState()
     val isFaceDown by flipSensorManager.isFaceDown.collectAsState()
 
-    var activeTab by remember { mutableIntStateOf(0) } // 0: ⏱️ 睡眠表盘, 1: 📖 绘本跟读歌词
+    var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读歌词
     var showAmbientSheet by remember { mutableStateOf(false) }
+    var showTimerDialog by remember { mutableStateOf(false) }
 
     // 监听翻转扣屏感应：仅当正面朝下扣屏时熄屏；手持时恢复系统自然亮度
     LaunchedEffect(isFaceDown) {
@@ -217,7 +226,7 @@ fun SleepPlayerScreen(
                         FilterChip(
                             selected = (activeTab == 0),
                             onClick = { activeTab = 0 },
-                            label = { Text("⏱️ 睡眠表盘", style = MaterialTheme.typography.labelSmall) },
+                            label = { Text("🖼️ 绘本插图", style = MaterialTheme.typography.labelSmall) },
                             shape = CircleShape,
                             colors = FilterChipDefaults.filterChipColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -256,7 +265,7 @@ fun SleepPlayerScreen(
                     }
                 }
 
-                // 中央动态区域：倒计时表盘 或 绘本歌词滚动
+                // 中央动态区域：绘本专属插画 或 绘本歌词滚动
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -269,13 +278,19 @@ fun SleepPlayerScreen(
                         label = "centerView"
                     ) { tab ->
                         if (tab == 0) {
-                            CountdownRingComponent(
-                                remainingSeconds = playbackState.remainingTimerSeconds,
-                                selectedTimerMinutes = playbackState.selectedTimerMinutes,
-                                isTimerActive = playbackState.isTimerActive,
-                                isPlaying = playbackState.isPlaying,
-                                onPresetClicked = { minutes ->
-                                    viewModel.startTimer(minutes)
+                            StoryIllustrationCard(
+                                storyTitle = playbackState.storyTitle,
+                                coverImagePath = playbackState.coverImagePath,
+                                isGeneratingCover = playbackState.isGeneratingCover,
+                                onGenerateCover = {
+                                    viewModel.generateCoverIllustration(
+                                        onSuccess = {
+                                            Toast.makeText(context, "绘本插画绘制完成！", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onError = { err ->
+                                            Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                                        }
+                                    )
                                 }
                             )
                         } else {
@@ -289,36 +304,37 @@ fun SleepPlayerScreen(
                     }
                 }
 
-                // 下部：系统音量、助眠白噪音、进度条与播控大按钮
+                // 下部：系统音量、助眠白噪音、睡眠定时胶囊、进度条与播控大按钮
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // 真实系统硬件音量 与 助眠白噪音背景音控制
+                    // 真实系统硬件音量、助眠白噪音、伴读睡眠定时（胶囊三剑客）
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 真实系统音量胶囊
+                        // 1. 真实系统音量胶囊
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 val volPercent = (playbackState.currentVolume * 100).toInt()
                                 Text(
-                                    text = if (volPercent > 0) "🔊 音量: $volPercent%" else "🔇 静音",
+                                    text = if (volPercent > 0) "🔊 $volPercent%" else "🔇 静音",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 12.sp
                                 )
                             }
                         }
 
-                        // 助眠背景白噪音混音胶囊
+                        // 2. 助眠背景白噪音混音胶囊
                         Surface(
                             shape = CircleShape,
                             color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
@@ -331,22 +347,72 @@ fun SleepPlayerScreen(
                             modifier = Modifier.clickable { showAmbientSheet = true }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = if (playbackState.ambientSound != AmbientSound.OFF) "${playbackState.ambientSound.iconEmoji} ${playbackState.ambientSound.title}"
-                                    else "🌿 助眠背景音",
+                                    else "🌿 助眠背景",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (playbackState.ambientSound != AmbientSound.OFF) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (playbackState.ambientSound != AmbientSound.OFF) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = "▾",
                                     fontSize = 10.sp,
                                     color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // 3. 伴读睡眠定时选择胶囊（轻巧优雅，替代原来屏幕中心大表盘）
+                        val isFading = playbackState.isTimerActive && playbackState.remainingTimerSeconds in 1..300
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isFading) MaterialTheme.colorScheme.primaryContainer
+                            else if (playbackState.isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isFading) MaterialTheme.colorScheme.primary
+                                else if (playbackState.isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.clickable { showTimerDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val timerLabel = when {
+                                    isFading -> {
+                                        val min = playbackState.remainingTimerSeconds / 60
+                                        val sec = playbackState.remainingTimerSeconds % 60
+                                        "⏱️ ${min}:${String.format("%02d", sec)} 渐降"
+                                    }
+                                    playbackState.isTimerActive -> {
+                                        val remMin = (playbackState.remainingTimerSeconds + 59) / 60
+                                        "⏱️ ${remMin}分"
+                                    }
+                                    else -> "⏱️ 定时"
+                                }
+                                Text(
+                                    text = timerLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isFading || playbackState.isTimerActive) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (isFading || playbackState.isTimerActive) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 12.sp
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "▾",
+                                    fontSize = 10.sp,
+                                    color = if (isFading || playbackState.isTimerActive) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -507,6 +573,17 @@ fun SleepPlayerScreen(
             )
         }
 
+        // 伴读睡眠定时选择弹窗
+        if (showTimerDialog) {
+            SleepTimerDialog(
+                selectedMinutes = playbackState.selectedTimerMinutes,
+                isTimerActive = playbackState.isTimerActive,
+                onSelectMinutes = { minutes -> viewModel.startTimer(minutes) },
+                onCancelTimer = { viewModel.cancelTimer() },
+                onDismiss = { showTimerDialog = false }
+            )
+        }
+
         // 翻转扣屏感应触发时的全屏透明拦截防误触遮罩
         if (isFaceDown) {
             Box(
@@ -609,149 +686,144 @@ private fun StoryLyricsComponent(
 }
 
 /**
- * 环形倒计时组件：包含舒缓睡眠呼吸动效光环与平滑进阶弧线
+ * 睡前绘本专属插画展示与智能绘制组件 (Local-First 高清渲染)
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CountdownRingComponent(
-    remainingSeconds: Int,
-    selectedTimerMinutes: Int,
-    isTimerActive: Boolean,
-    isPlaying: Boolean,
-    onPresetClicked: (Int) -> Unit
+private fun StoryIllustrationCard(
+    storyTitle: String,
+    coverImagePath: String?,
+    isGeneratingCover: Boolean,
+    onGenerateCover: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "sleepBreathing")
-    val breathScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = if (isPlaying) 1.08f else 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+    val bitmap = remember(coverImagePath) {
+        if (!coverImagePath.isNullOrBlank()) {
+            val file = File(coverImagePath)
+            if (file.exists() && file.length() > 0) {
+                try {
+                    BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+        } else null
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
-        label = "breathScale"
-    )
-
-    val totalTimerSec = (if (selectedTimerMinutes > 0) selectedTimerMinutes else 30) * 60f
-    val targetProgress = if (isTimerActive && remainingSeconds > 0) {
-        (remainingSeconds / totalTimerSec).coerceIn(0f, 1f)
-    } else 0f
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "ringProgress"
-    )
-
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    val glowColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        border = BorderStroke(
+            1.dp,
+            if (bitmap != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+            else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
         Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(190.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            // 背景柔和呼吸光晕
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .scale(breathScale)
-                    .background(glowColor, CircleShape)
-            )
-
-            Canvas(modifier = Modifier.size(166.dp)) {
-                val strokeWidth = 8.dp.toPx()
-                val radius = (size.minDimension - strokeWidth) / 2
-                val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
-                val arcSize = Size(radius * 2, radius * 2)
-
-                drawArc(
-                    color = trackColor,
-                    startAngle = -90f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth)
-                )
-
-                if (animatedProgress > 0f) {
-                    drawArc(
-                        color = primaryColor,
-                        startAngle = -90f,
-                        sweepAngle = animatedProgress * 360f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                    )
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (isTimerActive) {
-                    Text(
-                        text = formatTime(remainingSeconds.toLong()),
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (isPlaying) "睡眠伴读倒计时" else "伴读就绪 · 倒计时已暂停",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = "--:--",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "点选下方开启定时",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 快速选择 15 / 30 / 45 分钟
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppConstants.TIMER_PRESETS_MINUTES.forEach { minutes ->
-                val isSelected = isTimerActive && (selectedTimerMinutes == minutes)
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onPresetClicked(minutes) },
-                    label = {
-                        Text(
-                            text = "${minutes}分钟",
-                            style = MaterialTheme.typography.labelMedium
+            when {
+                isGeneratingCover -> {
+                    // 生成中动效与微光提示
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(44.dp),
+                            strokeWidth = 3.dp
                         )
-                    },
-                    shape = MaterialTheme.shapes.small,
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = isSelected,
-                        borderColor = MaterialTheme.colorScheme.outlineVariant,
-                        selectedBorderColor = MaterialTheme.colorScheme.primary
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "🎨 正在为《${storyTitle.ifEmpty { "故事" }}》编织睡前插画...",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "基于 gemini-3.1-flash-image 高清绘本模型",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                bitmap != null -> {
+                    // 已有绘本插画展示
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "故事绘本插画",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-                )
+
+                    // 右上角浮层：重新生成小按钮
+                    Surface(
+                        shape = CircleShape,
+                        color = DeepNightScrim.copy(alpha = 0.65f),
+                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(10.dp)
+                            .clickable { onGenerateCover() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "🪄 重新绘制", fontSize = 11.sp, color = Color.White)
+                        }
+                    }
+                }
+
+                else -> {
+                    // 尚未生成插图时的温馨艺术占位景致
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp)
+                    ) {
+                        Text(text = "🌙", fontSize = 42.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = storyTitle.ifEmpty { "精选睡前童话" },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "暂无绘本插画 · 可一键调用大模型智能绘制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        FilledTonalButton(
+                            onClick = onGenerateCover,
+                            shape = CircleShape,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+                        ) {
+                            Text(text = "🪄 生成绘本插图", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
             }
         }
     }

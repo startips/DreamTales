@@ -3,6 +3,7 @@ package com.bedtime.dreamtales
 import com.bedtime.dreamtales.core.constants.AppConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -569,5 +570,67 @@ class DreamTalesCoreTest {
         val persistedStory = draftStory.copy(id = 88L)
         val successState = com.bedtime.dreamtales.ui.home.StoryGenerationUiState.Success(persistedStory)
         assertEquals(88L, successState.story.id)
+    }
+
+    @Test
+    fun testImageApiResponseParsingAndBase64Handling() {
+        val sampleBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        val dataUrl = "data:image/png;base64,$sampleBase64"
+
+        val json = """
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "images": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": "$dataUrl"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val resp = com.google.gson.Gson().fromJson(json, com.bedtime.dreamtales.data.api.CpaChatResponse::class.java)
+        val extractedUrl = resp.choices?.firstOrNull()?.message?.images?.firstOrNull()?.image_url?.url
+        assertNotNull(extractedUrl)
+        assertTrue(extractedUrl!!.startsWith("data:image/"))
+
+        val base64Data = extractedUrl.substringAfter(",")
+        assertEquals(sampleBase64, base64Data)
+        val decoded = java.util.Base64.getDecoder().decode(base64Data)
+        assertTrue(decoded.isNotEmpty())
+    }
+
+    @Test
+    fun testSleepTimerDisplayLogic() {
+        fun getTimerDisplay(isTimerActive: Boolean, remainingSeconds: Int): String {
+            val isFading = isTimerActive && remainingSeconds in 1..300
+            return when {
+                isFading -> {
+                    val min = remainingSeconds / 60
+                    val sec = remainingSeconds % 60
+                    "⏱️ ${min}:${String.format("%02d", sec)} 渐降"
+                }
+                isTimerActive -> {
+                    val remMin = (remainingSeconds + 59) / 60
+                    "⏱️ ${remMin}分"
+                }
+                else -> "⏱️ 定时"
+            }
+        }
+
+        assertEquals("⏱️ 定时", getTimerDisplay(false, 0))
+        assertEquals("⏱️ 30分", getTimerDisplay(true, 1800))
+        assertEquals("⏱️ 10分", getTimerDisplay(true, 590))
+        assertEquals("⏱️ 5:00 渐降", getTimerDisplay(true, 300))
+        assertEquals("⏱️ 4:32 渐降", getTimerDisplay(true, 272))
+        assertEquals("⏱️ 0:15 渐降", getTimerDisplay(true, 15))
     }
 }

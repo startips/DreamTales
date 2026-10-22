@@ -15,5 +15,6 @@ data class Story(
     val iconEmoji: String = "",        // 题材语义图标（如 🐴, 🦌, 👧, 🦕 等）
     val playCount: Int = 0,            // 播放频次（用于主页热度排序）
     val isFavorite: Boolean = false,   // 是否收藏（宝宝最爱听）
+    val coverImagePath: String? = null,// 专属绘本插画本地文件路径
     val createdAt: Long = System.currentTimeMillis()
 )

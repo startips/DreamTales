@@ -30,9 +30,19 @@ data class CpaChoice(
     val finish_reason: String?
 )
 
+data class CpaImageWrapper(
+    val type: String?,
+    val image_url: CpaImageUrl?
+)
+
+data class CpaImageUrl(
+    val url: String?
+)
+
 data class CpaResponseMessage(
     val role: String?,
-    val content: String?
+    val content: String?,
+    val images: List<CpaImageWrapper>? = null
 )
 
 data class CpaError(
