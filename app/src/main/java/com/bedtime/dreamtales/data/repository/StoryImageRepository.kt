@@ -56,7 +56,19 @@ class StoryImageRepository(private val context: Context) {
 
         if (!response.isSuccessful) {
             val errBody = response.errorBody()?.string().orEmpty()
-            throw RuntimeException("绘制绘本插画失败 (HTTP ${response.code()}): $errBody")
+            val friendlyMsg = when {
+                errBody.contains("RESOURCE_EXHAUSTED") || errBody.contains("model_cooldown") || response.code() == 429 -> {
+                    "绘本模型上游渠道配额耗尽正在冷却中，请在 API 管理后台补充/更换渠道 Key 或稍后再试"
+                }
+                errBody.contains("permission_error") -> {
+                    "当前 API 令牌未开启 gemini-3.1-flash-image 模型权限，请在后台放行"
+                }
+                errBody.contains("insufficient_quota") -> {
+                    "当前 API 账户额度不足，请检查后台余额"
+                }
+                else -> "绘制绘本插画失败 (HTTP ${response.code()}): ${errBody.take(100)}"
+            }
+            throw RuntimeException(friendlyMsg)
         }
 
         val choice = response.body()?.choices?.firstOrNull()

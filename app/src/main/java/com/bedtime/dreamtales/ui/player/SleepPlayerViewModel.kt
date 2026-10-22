@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.bedtime.dreamtales.data.repository.StoryImageRepository
 import com.bedtime.dreamtales.service.StoryPlaybackService
 import com.bedtime.dreamtales.service.StoryPlaybackState
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 class SleepPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -66,13 +68,18 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             playbackService?.setGeneratingCover(true)
             try {
-                val path = storyImageRepository.generateAndSaveIllustration(
-                    storyId = state.storyId,
-                    storyTitle = state.storyTitle,
-                    storyContent = state.storyContent
-                )
-                playbackService?.updateCoverImagePath(path)
-                onSuccess?.invoke()
+                // 45 秒最长保护，杜绝任何未知网络卡顿导致界面永久转圈
+                withTimeout(45_000L) {
+                    val path = storyImageRepository.generateAndSaveIllustration(
+                        storyId = state.storyId,
+                        storyTitle = state.storyTitle,
+                        storyContent = state.storyContent
+                    )
+                    playbackService?.updateCoverImagePath(path)
+                    onSuccess?.invoke()
+                }
+            } catch (e: TimeoutCancellationException) {
+                onError?.invoke("绘本生图连接超时，请检查网络或稍后再试")
             } catch (e: Exception) {
                 onError?.invoke(e.message ?: "生图失败")
             } finally {

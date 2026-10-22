@@ -128,13 +128,17 @@ class RateLimitInterceptor(
         var response = chain.proceed(request)
 
         while (!response.isSuccessful && response.code == 429 && attempt < maxRetries) {
+            val retryAfterSeconds = response.header("Retry-After")?.toLongOrNull() ?: 0L
+            if (retryAfterSeconds > 10L) {
+                // 若服务端返回长时间冷却（如上游配额耗尽数小时），切勿在网络拦截器中死等睡眠，立即中断并返回当前响应
+                break
+            }
+
             attempt++
             response.close()
 
-            // 检查服务器是否有 Retry-After 头，若无则使用指数退避 (2000ms, 4000ms)
-            val retryAfterSeconds = response.header("Retry-After")?.toLongOrNull()
-            val backoffMillis = if (retryAfterSeconds != null && retryAfterSeconds > 0) {
-                retryAfterSeconds * 1000L
+            val backoffMillis = if (retryAfterSeconds > 0) {
+                (retryAfterSeconds * 1000L).coerceAtMost(3000L)
             } else {
                 max(1500L, 2000L * attempt)
             }

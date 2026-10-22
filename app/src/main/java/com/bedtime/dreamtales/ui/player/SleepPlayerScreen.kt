@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -120,6 +121,7 @@ fun SleepPlayerScreen(
     var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读歌词
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+    var coverGenerationError by remember { mutableStateOf<String?>(null) }
 
     // 监听翻转扣屏感应：仅当正面朝下扣屏时熄屏；手持时恢复系统自然亮度
     LaunchedEffect(isFaceDown) {
@@ -288,7 +290,7 @@ fun SleepPlayerScreen(
                                             Toast.makeText(context, "绘本插画绘制完成！", Toast.LENGTH_SHORT).show()
                                         },
                                         onError = { err ->
-                                            Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                                            coverGenerationError = err
                                         }
                                     )
                                 }
@@ -581,6 +583,47 @@ fun SleepPlayerScreen(
                 onSelectMinutes = { minutes -> viewModel.startTimer(minutes) },
                 onCancelTimer = { viewModel.cancelTimer() },
                 onDismiss = { showTimerDialog = false }
+            )
+        }
+
+        // 绘本生图错误/配额提示弹窗
+        if (coverGenerationError != null) {
+            AlertDialog(
+                onDismissRequest = { coverGenerationError = null },
+                shape = MaterialTheme.shapes.extraLarge,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "🎨", fontSize = 22.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "绘本生图提示",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = coverGenerationError!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 22.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { coverGenerationError = null },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text("我知道了", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
             )
         }
 
