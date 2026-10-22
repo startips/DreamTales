@@ -1118,7 +1118,7 @@ fun HomeScreen(
         )
     }
 
-    // 报错提示
+    // 语音合成提示
     if (synthesisState is SynthesisUiState.Error) {
         val err = synthesisState as SynthesisUiState.Error
         AlertDialog(
@@ -1127,9 +1127,9 @@ fun HomeScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             title = {
                 Text(
-                    text = "伴读提示",
+                    text = "🌙 伴读提示",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -1137,12 +1137,51 @@ fun HomeScreen(
                 Text(
                     text = err.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
                 )
             },
             confirmButton = {
                 Button(
                     onClick = { viewModel.resetSynthesisState() },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text("我知道了", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        )
+    }
+
+    // 故事创作/检索提示
+    if (generationState is StoryGenerationUiState.Error) {
+        val err = generationState as StoryGenerationUiState.Error
+        AlertDialog(
+            onDismissRequest = { viewModel.resetGenerationState() },
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            title = {
+                Text(
+                    text = "🌙 伴读提示",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = err.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.resetGenerationState() },
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,

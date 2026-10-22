@@ -60,7 +60,16 @@ class RecordVoiceViewModel(application: Application) : AndroidViewModel(applicat
             } catch (e: IllegalStateException) {
                 _cloneState.value = CloneUiState.Error(e.message ?: "未配置有效的 API Key")
             } catch (e: Exception) {
-                _cloneState.value = CloneUiState.Error("音色克隆失败: ${e.message ?: "网络或服务异常"}")
+                var curr: Throwable? = e
+                var friendlyMsg: String? = null
+                while (curr != null) {
+                    if (curr is com.bedtime.dreamtales.core.utils.RateLimitExceededException) {
+                        friendlyMsg = curr.message
+                        break
+                    }
+                    curr = curr.cause
+                }
+                _cloneState.value = CloneUiState.Error(friendlyMsg ?: "音色克隆失败: ${e.message ?: "网络或服务异常"}")
             }
         }
     }

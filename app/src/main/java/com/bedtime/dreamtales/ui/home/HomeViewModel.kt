@@ -240,7 +240,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: IllegalStateException) {
                 _synthesisState.value = SynthesisUiState.Error(e.message ?: "未配置 API Key")
             } catch (e: Exception) {
-                _synthesisState.value = SynthesisUiState.Error("合成失败: ${e.message ?: "网络或服务异常"}")
+                _synthesisState.value = SynthesisUiState.Error(getFriendlyErrorMessage(e, "合成失败"))
             }
         }
     }
@@ -256,7 +256,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val candidates = storyRepository.searchStoryCandidatesWithCpa(query.trim())
                 _generationState.value = StoryGenerationUiState.CandidatesReady(query, candidates)
             } catch (e: Exception) {
-                _generationState.value = StoryGenerationUiState.Error("检索候选故事失败: ${e.message ?: "网络异常"}")
+                _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "检索候选故事失败"))
             }
         }
     }
@@ -271,9 +271,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val story = storyRepository.generateFullStoryFromCandidate(candidate)
                 _generationState.value = StoryGenerationUiState.Success(story)
             } catch (e: Exception) {
-                _generationState.value = StoryGenerationUiState.Error("创作故事失败: ${e.message ?: "网络异常"}")
+                _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "创作故事失败"))
             }
         }
+    }
+
+    private fun getFriendlyErrorMessage(e: Throwable, fallbackPrefix: String): String {
+        var curr: Throwable? = e
+        while (curr != null) {
+            if (curr is com.bedtime.dreamtales.core.utils.RateLimitExceededException) {
+                return curr.message ?: "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟限10次请求，请稍候再试）"
+            }
+            curr = curr.cause
+        }
+        val msg = e.message.orEmpty()
+        if (msg.contains("429") || msg.contains("Too Many Requests", ignoreCase = true)) {
+            return "🌙 伴读提示：故事服务正在降温安睡中，小耳朵稍作休息，请稍等片刻再试哦~"
+        }
+        return if (msg.startsWith(fallbackPrefix)) msg else "$fallbackPrefix: ${msg.ifBlank { "网络或服务异常" }}"
     }
 
     fun clearCandidates() {
