@@ -454,4 +454,27 @@ class DreamTalesCoreTest {
         assertEquals(5, batch2.size)
         assertTrue("新批次不应包含上一批次的词汇", batch2.none { it in batch1 })
     }
+
+    @Test
+    fun testStoryPreviewDraftStateAndPersistenceSeparation() {
+        val draftStory = com.bedtime.dreamtales.data.local.entity.Story(
+            id = 0, // 草稿阶段尚未存库，id 必须为 0
+            title = "神奇的月光飞毯",
+            targetAge = "3-6岁",
+            content = "深蓝色的夜空下，一张毛茸茸的金色小飞毯静静漂浮着...",
+            durationSeconds = 180,
+            iconEmoji = "🌙"
+        )
+
+        // 验证处于预览状态草稿
+        val previewState = com.bedtime.dreamtales.ui.home.StoryGenerationUiState.PreviewDraft(draftStory)
+        assertEquals(0L, previewState.draft.id)
+        assertEquals("神奇的月光飞毯", previewState.draft.title)
+        assertTrue(previewState.draft.content.startsWith("深蓝色"))
+
+        // 验证确认持久化后的状态
+        val persistedStory = draftStory.copy(id = 88L)
+        val successState = com.bedtime.dreamtales.ui.home.StoryGenerationUiState.Success(persistedStory)
+        assertEquals(88L, successState.story.id)
+    }
 }

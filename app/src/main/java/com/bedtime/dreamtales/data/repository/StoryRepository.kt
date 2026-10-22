@@ -325,9 +325,9 @@ class StoryRepository(private val context: Context) {
     }
 
     /**
-     * 第二步：用户在候选卡片中点选后，调用 CPA 大模型编织完整伴读故事并落盘
+     * 第二步：根据候选卡片编织完整睡前正文草稿（仅生成内容，暂不落盘入库，供用户阅读全文确认）
      */
-    suspend fun generateFullStoryFromCandidate(
+    suspend fun generateStoryDraftFromCandidate(
         candidate: StoryCandidate
     ): Story = withContext(Dispatchers.IO) {
         val apiKey = appConfig.getCpaApiKey()
@@ -383,20 +383,42 @@ class StoryRepository(private val context: Context) {
             throw RuntimeException("解析故事 JSON 失败: ${e.message}\n原始文本: $cleanJson")
         }
 
-        val newStory = Story(
+        val estimatedDuration = if (parsed.durationSeconds > 0) {
+            parsed.durationSeconds
+        } else {
+            ((parsed.content.length / 3.5).toInt()).coerceIn(60, 600)
+        }
+
+        Story(
+            id = 0,
             title = parsed.title.ifBlank { candidate.title },
             targetAge = parsed.targetAge.ifBlank { candidate.targetAge },
             content = parsed.content,
-            durationSeconds = if (parsed.durationSeconds > 0) parsed.durationSeconds else 180,
+            durationSeconds = estimatedDuration,
             isAiGenerated = true,
             dateLabel = parsed.dateLabel.ifBlank { "灵感伴读" },
             iconEmoji = parsed.iconEmoji.ifBlank { candidate.iconEmoji.ifBlank { "🌙" } },
-            playCount = 1,
+            playCount = 0,
             createdAt = System.currentTimeMillis()
         )
+    }
 
-        val id = storyDao.insertStory(newStory)
-        newStory.copy(id = id)
+    /**
+     * 将用户已确认收录的故事正式持久化保存至文库
+     */
+    suspend fun saveStoryToLibrary(story: Story): Story = withContext(Dispatchers.IO) {
+        val id = storyDao.insertStory(story.copy(createdAt = System.currentTimeMillis()))
+        story.copy(id = id)
+    }
+
+    /**
+     * 兼容接口：用户点选后直接生成并入库
+     */
+    suspend fun generateFullStoryFromCandidate(
+        candidate: StoryCandidate
+    ): Story = withContext(Dispatchers.IO) {
+        val draft = generateStoryDraftFromCandidate(candidate)
+        saveStoryToLibrary(draft)
     }
 
     /**

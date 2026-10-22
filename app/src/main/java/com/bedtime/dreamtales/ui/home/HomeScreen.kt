@@ -178,6 +178,7 @@ fun HomeScreen(
             val story = (generationState as StoryGenerationUiState.Success).story
             viewModel.resetGenerationState()
             searchQuery = ""
+            Toast.makeText(context, "已成功添加《${story.title}》至文库！", Toast.LENGTH_SHORT).show()
             viewModel.onStoryClicked(story, onNavigateToPlayer)
         }
     }
@@ -541,7 +542,7 @@ fun HomeScreen(
                             }
                         }
 
-                        // 搜索结果候选列表（二次点选下载机制）
+                        // 搜索结果候选列表（点选查看全文确认机制）
                         if (generationState is StoryGenerationUiState.CandidatesReady) {
                             val candidatesState = generationState as StoryGenerationUiState.CandidatesReady
                             Spacer(modifier = Modifier.height(12.dp))
@@ -551,7 +552,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "精选候选童话 (轻触收录下载)：",
+                                    text = "精选候选童话 (轻触查看全文)：",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
@@ -569,7 +570,7 @@ fun HomeScreen(
                                 candidatesState.candidates.forEach { candidate ->
                                     CandidateStoryCard(
                                         candidate = candidate,
-                                        onSelect = { viewModel.confirmAndGenerateStory(candidate) }
+                                        onSelect = { viewModel.requestStoryPreview(candidate) }
                                     )
                                 }
                             }
@@ -1127,6 +1128,16 @@ fun HomeScreen(
             }
         )
     }
+
+    // 故事全文预览与确认添加弹窗
+    if (generationState is StoryGenerationUiState.PreviewDraft) {
+        val draft = (generationState as StoryGenerationUiState.PreviewDraft).draft
+        StoryPreviewDialog(
+            draft = draft,
+            onConfirm = { viewModel.confirmAndSaveDraft(draft) },
+            onDismiss = { viewModel.cancelPreview() }
+        )
+    }
 }
 
 /**
@@ -1207,7 +1218,7 @@ private fun CandidateStoryCard(
                 ),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text("收录伴读", style = MaterialTheme.typography.labelSmall)
+                Text("查看全文", style = MaterialTheme.typography.labelSmall)
             }
         }
     }

@@ -39,6 +39,7 @@ sealed class StoryGenerationUiState {
     data class SearchingCandidates(val query: String) : StoryGenerationUiState()
     data class CandidatesReady(val query: String, val candidates: List<StoryCandidate>) : StoryGenerationUiState()
     data class GeneratingStory(val title: String) : StoryGenerationUiState()
+    data class PreviewDraft(val draft: Story) : StoryGenerationUiState()
     data class Success(val story: Story) : StoryGenerationUiState()
     data class Error(val message: String) : StoryGenerationUiState()
 }
@@ -228,16 +229,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var lastQuery: String = ""
+    private var lastCandidates: List<StoryCandidate> = emptyList()
+
     /**
      * 搜索故事：先检索推荐 3 个候选故事卡片供二次点选
      */
     fun searchStoryCandidates(query: String) {
         if (query.isBlank()) return
+        lastQuery = query.trim()
         viewModelScope.launch {
-            _generationState.value = StoryGenerationUiState.SearchingCandidates(query)
+            _generationState.value = StoryGenerationUiState.SearchingCandidates(lastQuery)
             try {
-                val candidates = storyRepository.searchStoryCandidatesWithCpa(query.trim())
-                _generationState.value = StoryGenerationUiState.CandidatesReady(query, candidates)
+                val candidates = storyRepository.searchStoryCandidatesWithCpa(lastQuery)
+                lastCandidates = candidates
+                _generationState.value = StoryGenerationUiState.CandidatesReady(lastQuery, candidates)
             } catch (e: Exception) {
                 _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "检索候选故事失败"))
             }
@@ -245,18 +251,50 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 二次确认：用户选中某个候选故事后，生成完整正文并自动加入文库
+     * 第一步：用户在候选卡片中点选后，调用 CPA 生成完整故事草稿并拉起全文预览弹窗
      */
-    fun confirmAndGenerateStory(candidate: StoryCandidate) {
+    fun requestStoryPreview(candidate: StoryCandidate) {
         viewModelScope.launch {
             _generationState.value = StoryGenerationUiState.GeneratingStory(candidate.title)
             try {
-                val story = storyRepository.generateFullStoryFromCandidate(candidate)
-                _generationState.value = StoryGenerationUiState.Success(story)
+                val draft = storyRepository.generateStoryDraftFromCandidate(candidate)
+                _generationState.value = StoryGenerationUiState.PreviewDraft(draft)
             } catch (e: Exception) {
-                _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "创作故事失败"))
+                _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "生成故事正文失败"))
             }
         }
+    }
+
+    /**
+     * 第二步：用户在全文预览中确认添加，正式存盘至 Room 文库
+     */
+    fun confirmAndSaveDraft(draft: Story) {
+        viewModelScope.launch {
+            try {
+                val savedStory = storyRepository.saveStoryToLibrary(draft)
+                _generationState.value = StoryGenerationUiState.Success(savedStory)
+            } catch (e: Exception) {
+                _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "收录故事失败"))
+            }
+        }
+    }
+
+    /**
+     * 取消全文预览：返回到候选卡片列表，方便用户选择其他候选或重新搜索
+     */
+    fun cancelPreview() {
+        if (lastCandidates.isNotEmpty()) {
+            _generationState.value = StoryGenerationUiState.CandidatesReady(lastQuery, lastCandidates)
+        } else {
+            _generationState.value = StoryGenerationUiState.Idle
+        }
+    }
+
+    /**
+     * 兼容接口：直接生成并入库
+     */
+    fun confirmAndGenerateStory(candidate: StoryCandidate) {
+        requestStoryPreview(candidate)
     }
 
     private fun getFriendlyErrorMessage(e: Throwable, fallbackPrefix: String): String {
