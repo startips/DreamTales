@@ -157,6 +157,9 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showAllStories by remember { mutableStateOf(false) }
     var voiceToDelete by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.VoiceProfile?>(null) }
+    var recommendedStories by remember {
+        mutableStateOf(com.bedtime.dreamtales.core.StorySpeechHelper.getRandomRecommendations(5))
+    }
 
     val sheetState = rememberModalBottomSheetState()
     val focusManager = LocalFocusManager.current
@@ -442,15 +445,19 @@ fun HomeScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // 灵感快捷推荐气泡
-                        val quickSuggestions = listOf("九色鹿", "小红帽", "神笔马良", "森林小兔子", "月亮上的秋千")
+                        // 灵感快捷推荐气泡（每次推荐全新故事题材，支持“换一批”）
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             item {
                                 SuggestionChip(
-                                    onClick = { showAddStoryDialog = true },
+                                    onClick = {
+                                        recommendedStories = com.bedtime.dreamtales.core.StorySpeechHelper.getRandomRecommendations(
+                                            count = 5,
+                                            exclude = recommendedStories
+                                        )
+                                    },
                                     label = {
                                         Text(
-                                            text = "✍️ 粘贴自录童话",
+                                            text = "🔄 换一批",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -466,7 +473,7 @@ fun HomeScreen(
                                     )
                                 )
                             }
-                            items(quickSuggestions) { tag ->
+                            items(recommendedStories) { tag ->
                                 SuggestionChip(
                                     onClick = {
                                         focusManager.clearFocus()

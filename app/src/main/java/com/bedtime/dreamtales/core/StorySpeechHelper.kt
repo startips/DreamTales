@@ -195,4 +195,30 @@ object StorySpeechHelper {
             estimatedDurationMinutes = estMin
         )
     }
+
+    /**
+     * 高质量睡前童话推荐题材池（精选经典名篇、温柔动物、治愈梦境与陪伴童话）
+     */
+    val STORY_RECOMMENDATION_POOL = listOf(
+        // 经典名篇类
+        "九色鹿", "神笔马良", "小红帽", "快乐王子", "拇指姑娘", "小蝌蚪找妈妈", "丑小鸭的宁静湖泊", "豌豆公主的软羽绒",
+        // 晚安动物类
+        "打哈欠的小熊", "小松鼠的落叶被", "小狐狸看星星", "小青蛙的荷叶伞", "晚睡的小树懒", "小刺猬的甜梦", "小兔子的胡萝卜热汤",
+        // 梦境与自然类
+        "给月亮织围巾", "云朵棉花糖", "海豚的摇篮曲", "会发光的彩虹森林", "乘风飞行的蒲公英", "银河小摇橹船", "深海珍珠的晚安曲",
+        // 陪伴与勇敢类
+        "做甜梦的小恐龙", "小行星上的玫瑰", "星空夜行列车", "晚安小星星", "守护梦境的小鹿", "不会飞的小雏鸟", "飞向月球的纸飞机"
+    )
+
+    /**
+     * 随机获取一组睡前故事推荐词（支持排除当前批次以实现换一批）
+     */
+    fun getRandomRecommendations(count: Int = 5, exclude: List<String> = emptyList()): List<String> {
+        val candidates = STORY_RECOMMENDATION_POOL.filter { it !in exclude }
+        return if (candidates.size >= count) {
+            candidates.shuffled().take(count)
+        } else {
+            STORY_RECOMMENDATION_POOL.shuffled().take(count)
+        }
+    }
 }

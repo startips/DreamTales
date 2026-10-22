@@ -438,4 +438,20 @@ class DreamTalesCoreTest {
         assertTrue("异常消息应包含等待秒数", ex.message.contains("35 秒"))
         assertTrue("异常消息应包含限速规则说明", ex.message.contains("每分钟最多请求5次"))
     }
+
+    @Test
+    fun testDynamicStoryRecommendations() {
+        val pool = com.bedtime.dreamtales.core.StorySpeechHelper.STORY_RECOMMENDATION_POOL
+        assertTrue("推荐词库应包含充足的故事题材", pool.size >= 20)
+
+        // 随机获取 5 个推荐词
+        val batch1 = com.bedtime.dreamtales.core.StorySpeechHelper.getRandomRecommendations(5)
+        assertEquals(5, batch1.size)
+        assertEquals(5, batch1.toSet().size) // 互不重复
+
+        // 换一批：排除第一批
+        val batch2 = com.bedtime.dreamtales.core.StorySpeechHelper.getRandomRecommendations(5, exclude = batch1)
+        assertEquals(5, batch2.size)
+        assertTrue("新批次不应包含上一批次的词汇", batch2.none { it in batch1 })
+    }
 }
