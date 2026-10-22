@@ -3,6 +3,8 @@ package com.bedtime.dreamtales.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import com.bedtime.dreamtales.core.constants.AppConfig
@@ -122,7 +124,7 @@ class StoryImageRepository(private val context: Context) {
     }
 
     /**
-     * 将家长从手机相册挑选的图片采样压缩并持久化保存为故事专属封面（免权限、防OOM）
+     * 将家长从手机相册挑选的图片采样压缩并持久化保存为故事专属封面（免权限、防OOM、自动校正拍摄旋转）
      */
     suspend fun saveImageFromUri(storyId: Long, sourceUri: Uri): String = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
@@ -131,9 +133,18 @@ class StoryImageRepository(private val context: Context) {
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        resolver.openInputStream(sourceUri)?.use { stream ->
+        val streamOpened = resolver.openInputStream(sourceUri)?.use { stream ->
             BitmapFactory.decodeStream(stream, null, options)
-        } ?: throw IllegalArgumentException("无法打开所选图片文件")
+            true
+        } ?: false
+
+        if (!streamOpened) {
+            throw IllegalArgumentException("无法打开所选图片文件")
+        }
+
+        if (options.outWidth <= 0 || options.outHeight <= 0) {
+            throw IllegalArgumentException("无法解析所选图片尺寸")
+        }
 
         val maxDim = maxOf(options.outWidth, options.outHeight)
         var sampleSize = 1
@@ -145,11 +156,38 @@ class StoryImageRepository(private val context: Context) {
         val decodeOptions = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
         }
-        val bitmap = resolver.openInputStream(sourceUri)?.use { stream ->
+        val rawBitmap = resolver.openInputStream(sourceUri)?.use { stream ->
             BitmapFactory.decodeStream(stream, null, decodeOptions)
         } ?: throw IllegalArgumentException("解析所选图片失败")
 
-        // 3. 安全保存到应用私有沙盒目录
+        // 3. 检查 EXIF 旋转角（防止手机拍摄照片颠倒或横置）
+        val finalBitmap = try {
+            val orientation = resolver.openInputStream(sourceUri)?.use { exifStream ->
+                val exif = ExifInterface(exifStream)
+                exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: ExifInterface.ORIENTATION_NORMAL
+
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            }
+            if (!matrix.isIdentity) {
+                Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true).also {
+                    rawBitmap.recycle()
+                }
+            } else {
+                rawBitmap
+            }
+        } catch (e: Exception) {
+            rawBitmap
+        }
+
+        // 4. 安全保存到应用私有沙盒目录
         val coversDir = File(context.filesDir, "story_covers")
         if (!coversDir.exists()) {
             coversDir.mkdirs()
@@ -157,11 +195,11 @@ class StoryImageRepository(private val context: Context) {
 
         val coverFile = File(coversDir, "cover_${storyId}.jpg")
         FileOutputStream(coverFile).use { outStream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outStream)
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outStream)
         }
-        bitmap.recycle()
+        finalBitmap.recycle()
 
-        // 4. 同步更新 Room 数据库
+        // 5. 同步更新 Room 数据库
         try {
             storyDao.updateCoverImagePath(storyId, coverFile.absolutePath)
         } catch (e: Exception) {

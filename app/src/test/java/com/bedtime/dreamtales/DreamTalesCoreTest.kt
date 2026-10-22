@@ -633,4 +633,26 @@ class DreamTalesCoreTest {
         assertEquals("⏱️ 4:32 渐降", getTimerDisplay(true, 272))
         assertEquals("⏱️ 0:15 渐降", getTimerDisplay(true, 15))
     }
+
+    @Test
+    fun testPhotoPickerSampleSizeCalculation() {
+        fun calculateSampleSize(width: Int, height: Int, targetMaxDim: Int = 1440): Int {
+            val maxDim = maxOf(width, height)
+            var sampleSize = 1
+            while (maxDim / sampleSize > targetMaxDim) {
+                sampleSize *= 2
+            }
+            return sampleSize
+        }
+
+        // 1. 常规尺寸无需缩减
+        assertEquals(1, calculateSampleSize(1080, 1080))
+        assertEquals(1, calculateSampleSize(1200, 800))
+
+        // 2. 3000x2000 相机大图 (3000 / 4 = 750 <= 1440)
+        assertEquals(4, calculateSampleSize(3000, 2000))
+
+        // 3. 6000x4000 亿级像素超大图 (6000 / 8 = 750 <= 1440)
+        assertEquals(8, calculateSampleSize(6000, 4000))
+    }
 }
