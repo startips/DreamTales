@@ -1,6 +1,7 @@
 package com.bedtime.dreamtales.ui.player
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bedtime.dreamtales.data.repository.StoryImageRepository
@@ -84,6 +85,42 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 onError?.invoke(e.message ?: "生图失败")
             } finally {
                 playbackService?.setGeneratingCover(false)
+            }
+        }
+    }
+
+    /**
+     * 将相册选择的照片持久化为当前故事封面
+     */
+    fun setCoverFromUri(uri: Uri, onSuccess: (() -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+        val state = playbackState.value
+        if (state.storyId == 0L) return
+
+        viewModelScope.launch {
+            try {
+                val path = storyImageRepository.saveImageFromUri(state.storyId, uri)
+                playbackService?.updateCoverImagePath(path)
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                onError?.invoke(e.message ?: "保存相册插画失败")
+            }
+        }
+    }
+
+    /**
+     * 清除当前故事的自定义封面
+     */
+    fun clearCover(onSuccess: (() -> Unit)? = null) {
+        val state = playbackState.value
+        if (state.storyId == 0L) return
+
+        viewModelScope.launch {
+            try {
+                storyImageRepository.clearStoryCover(state.storyId)
+                playbackService?.updateCoverImagePath(null)
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                // ignore
             }
         }
     }

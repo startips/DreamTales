@@ -1,6 +1,9 @@
 package com.bedtime.dreamtales.data.repository
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Base64
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.data.api.ApiClient
@@ -10,6 +13,7 @@ import com.bedtime.dreamtales.data.local.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 /**
  * 睡前故事专属绘本插画管理仓库 (Local-First)
@@ -115,5 +119,70 @@ class StoryImageRepository(private val context: Context) {
         }
 
         coverFile.absolutePath
+    }
+
+    /**
+     * 将家长从手机相册挑选的图片采样压缩并持久化保存为故事专属封面（免权限、防OOM）
+     */
+    suspend fun saveImageFromUri(storyId: Long, sourceUri: Uri): String = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+
+        // 1. 获取图片原始宽高，计算合理的采样率（限制长边不超过 1440px，防止大图引发 OOM）
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        resolver.openInputStream(sourceUri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        } ?: throw IllegalArgumentException("无法打开所选图片文件")
+
+        val maxDim = maxOf(options.outWidth, options.outHeight)
+        var sampleSize = 1
+        while (maxDim / sampleSize > 1440) {
+            sampleSize *= 2
+        }
+
+        // 2. 采样解码真实 Bitmap
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        val bitmap = resolver.openInputStream(sourceUri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, decodeOptions)
+        } ?: throw IllegalArgumentException("解析所选图片失败")
+
+        // 3. 安全保存到应用私有沙盒目录
+        val coversDir = File(context.filesDir, "story_covers")
+        if (!coversDir.exists()) {
+            coversDir.mkdirs()
+        }
+
+        val coverFile = File(coversDir, "cover_${storyId}.jpg")
+        FileOutputStream(coverFile).use { outStream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outStream)
+        }
+        bitmap.recycle()
+
+        // 4. 同步更新 Room 数据库
+        try {
+            storyDao.updateCoverImagePath(storyId, coverFile.absolutePath)
+        } catch (e: Exception) {
+            // ignore
+        }
+
+        coverFile.absolutePath
+    }
+
+    /**
+     * 清除指定故事的自定义绘本封面
+     */
+    suspend fun clearStoryCover(storyId: Long) = withContext(Dispatchers.IO) {
+        val coverFile = File(context.filesDir, "story_covers/cover_${storyId}.jpg")
+        if (coverFile.exists()) {
+            coverFile.delete()
+        }
+        try {
+            storyDao.updateCoverImagePath(storyId, "")
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 }

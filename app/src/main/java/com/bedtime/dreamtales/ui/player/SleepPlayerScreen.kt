@@ -3,6 +3,9 @@ package com.bedtime.dreamtales.ui.player
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -53,6 +56,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -62,6 +67,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -122,6 +128,23 @@ fun SleepPlayerScreen(
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
     var coverGenerationError by remember { mutableStateOf<String?>(null) }
+
+    // 原生无权限相册图片选择器（免敏感权限、零打扰）
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.setCoverFromUri(
+                uri = uri,
+                onSuccess = {
+                    Toast.makeText(context, "绘本封面已更新！", Toast.LENGTH_SHORT).show()
+                },
+                onError = { err ->
+                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                }
+            )
+        }
+    }
 
     // 监听翻转扣屏感应：仅当正面朝下扣屏时熄屏；手持时恢复系统自然亮度
     LaunchedEffect(isFaceDown) {
@@ -284,7 +307,12 @@ fun SleepPlayerScreen(
                                 storyTitle = playbackState.storyTitle,
                                 coverImagePath = playbackState.coverImagePath,
                                 isGeneratingCover = playbackState.isGeneratingCover,
-                                onGenerateCover = {
+                                onPickFromGallery = {
+                                    pickMediaLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                onGenerateAiCover = {
                                     viewModel.generateCoverIllustration(
                                         onSuccess = {
                                             Toast.makeText(context, "绘本插画绘制完成！", Toast.LENGTH_SHORT).show()
@@ -293,6 +321,11 @@ fun SleepPlayerScreen(
                                             coverGenerationError = err
                                         }
                                     )
+                                },
+                                onClearCover = {
+                                    viewModel.clearCover {
+                                        Toast.makeText(context, "已恢复默认绘本封面", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         } else {
@@ -729,15 +762,19 @@ private fun StoryLyricsComponent(
 }
 
 /**
- * 睡前绘本专属插画展示与智能绘制组件 (Local-First 高清渲染)
+ * 睡前绘本专属插画展示与智能绘制组件 (Local-First 高清渲染，支持相册自定义与AI生图)
  */
 @Composable
 private fun StoryIllustrationCard(
     storyTitle: String,
     coverImagePath: String?,
     isGeneratingCover: Boolean,
-    onGenerateCover: () -> Unit
+    onPickFromGallery: () -> Unit,
+    onGenerateAiCover: () -> Unit,
+    onClearCover: () -> Unit
 ) {
+    var showCoverMenu by remember { mutableStateOf(false) }
+
     val bitmap = remember(coverImagePath) {
         if (!coverImagePath.isNullOrBlank()) {
             val file = File(coverImagePath)
@@ -809,27 +846,57 @@ private fun StoryIllustrationCard(
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // 右上角浮层：重新生成小按钮
-                    Surface(
-                        shape = CircleShape,
-                        color = DeepNightScrim.copy(alpha = 0.65f),
-                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.35f)),
+                    // 右上角浮层：操作菜单微胶囊
+                    Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(10.dp)
-                            .clickable { onGenerateCover() }
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = CircleShape,
+                            color = DeepNightScrim.copy(alpha = 0.7f),
+                            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.35f)),
+                            modifier = Modifier.clickable { showCoverMenu = true }
                         ) {
-                            Text(text = "🪄 重新绘制", fontSize = 11.sp, color = Color.White)
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "📷 封面 ▾", fontSize = 11.sp, color = Color.White)
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showCoverMenu,
+                            onDismissRequest = { showCoverMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("📷 从相册更换封面") },
+                                onClick = {
+                                    showCoverMenu = false
+                                    onPickFromGallery()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🪄 AI 重新生成") },
+                                onClick = {
+                                    showCoverMenu = false
+                                    onGenerateAiCover()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🗑️ 清除自定义封面") },
+                                onClick = {
+                                    showCoverMenu = false
+                                    onClearCover()
+                                }
+                            )
                         }
                     }
                 }
 
                 else -> {
-                    // 尚未生成插图时的温馨艺术占位景致
+                    // 尚未设置封面时的温馨艺术占位景致
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
@@ -838,7 +905,7 @@ private fun StoryIllustrationCard(
                             .padding(20.dp)
                     ) {
                         Text(text = "🌙", fontSize = 42.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = storyTitle.ifEmpty { "精选睡前童话" },
                             style = MaterialTheme.typography.titleMedium,
@@ -846,24 +913,43 @@ private fun StoryIllustrationCard(
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "暂无绘本插画 · 可一键调用大模型智能绘制",
+                            text = "为宝贝配上亲子照片、手绘涂鸦或实体绘本封面：",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        FilledTonalButton(
-                            onClick = onGenerateCover,
-                            shape = CircleShape,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "🪄 生成绘本插图", style = MaterialTheme.typography.labelLarge)
+                            Button(
+                                onClick = onPickFromGallery,
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 7.dp)
+                            ) {
+                                Text(text = "📷 相册选图", style = MaterialTheme.typography.labelLarge)
+                            }
+
+                            OutlinedButton(
+                                onClick = onGenerateAiCover,
+                                shape = CircleShape,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = "🪄 AI 生图",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
