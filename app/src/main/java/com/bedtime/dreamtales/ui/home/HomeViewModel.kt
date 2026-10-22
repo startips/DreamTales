@@ -21,11 +21,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class StoryTab {
-    ALL,        // 🌙 精选文库
-    FAVORITES   // ❤️ 宝贝最爱
-}
-
 enum class StorySortOrder(val label: String) {
     FAVORITE_FIRST("❤️ 收藏优先"),
     MOST_PLAYED("🔥 最多收听"),
@@ -71,32 +66,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _themeMode = MutableStateFlow(appConfig.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
-    private val _currentTab = MutableStateFlow(StoryTab.ALL)
-    val currentTab: StateFlow<StoryTab> = _currentTab.asStateFlow()
-
     private val _sortOrder = MutableStateFlow(StorySortOrder.FAVORITE_FIRST)
     val sortOrder: StateFlow<StorySortOrder> = _sortOrder.asStateFlow()
 
     val filteredAndSortedStories: StateFlow<List<Story>> = combine(
         storyRepository.getAllStories(),
-        _currentTab,
         _sortOrder
-    ) { all, tab, sort ->
-        val base = when (tab) {
-            StoryTab.ALL -> all
-            StoryTab.FAVORITES -> all.filter { it.isFavorite }
-        }
+    ) { all, sort ->
         when (sort) {
-            StorySortOrder.FAVORITE_FIRST -> base.sortedWith(
+            StorySortOrder.FAVORITE_FIRST -> all.sortedWith(
                 compareByDescending<Story> { it.isFavorite }
                     .thenByDescending { it.playCount }
                     .thenByDescending { it.createdAt }
             )
-            StorySortOrder.MOST_PLAYED -> base.sortedWith(
+            StorySortOrder.MOST_PLAYED -> all.sortedWith(
                 compareByDescending<Story> { it.playCount }
                     .thenByDescending { it.createdAt }
             )
-            StorySortOrder.NEWEST_FIRST -> base.sortedByDescending { it.createdAt }
+            StorySortOrder.NEWEST_FIRST -> all.sortedByDescending { it.createdAt }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -125,10 +112,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _generationState = MutableStateFlow<StoryGenerationUiState>(StoryGenerationUiState.Idle)
     val generationState: StateFlow<StoryGenerationUiState> = _generationState.asStateFlow()
-
-    fun setTab(tab: StoryTab) {
-        _currentTab.value = tab
-    }
 
     fun setSortOrder(order: StorySortOrder) {
         _sortOrder.value = order

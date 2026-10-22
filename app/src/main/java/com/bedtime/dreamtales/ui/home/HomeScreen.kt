@@ -139,7 +139,6 @@ fun HomeScreen(
     val generationState by viewModel.generationState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
 
-    val currentTab by viewModel.currentTab.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
     val filteredAndSortedStories by viewModel.filteredAndSortedStories.collectAsState()
     val cacheSizeMb by viewModel.cacheSizeMb.collectAsState()
@@ -183,15 +182,9 @@ fun HomeScreen(
         }
     }
 
-    // 决定实际展示的故事列表
-    val displayStories = remember(filteredAndSortedStories, currentTab, showAllStories) {
-        if (currentTab == StoryTab.FAVORITES) {
-            // 收藏夹直接完整展示所有收藏故事
-            filteredAndSortedStories
-        } else {
-            // 精选文库下，默认收拢为前 5 篇，点击展开全部后再展示剩余
-            if (showAllStories) filteredAndSortedStories else filteredAndSortedStories.take(5)
-        }
+    // 决定实际展示的故事列表（默认收拢展示前 5 篇，点击展开全部后再展示剩余）
+    val displayStories = remember(filteredAndSortedStories, showAllStories) {
+        if (showAllStories) filteredAndSortedStories else filteredAndSortedStories.take(5)
     }
 
     Scaffold(
@@ -585,60 +578,35 @@ fun HomeScreen(
                 }
             }
 
-            // 2. 标签页切换栏（精选文库 vs 宝贝最爱）与 排序按钮
-            item(key = "tab_and_sort_bar") {
+            // 2. 故事文库表头与多维排序气泡
+            item(key = "story_header_and_sort_bar") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 2.dp),
+                        .padding(top = 4.dp, bottom = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 标签页药丸切换
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = (currentTab == StoryTab.ALL),
-                            onClick = { viewModel.setTab(StoryTab.ALL) },
-                            label = { Text("🌙 精选文库 (${stories.size})", style = MaterialTheme.typography.labelSmall) },
-                            shape = CircleShape,
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                labelColor = MaterialTheme.colorScheme.onSurface,
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = (currentTab == StoryTab.ALL),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary
-                            )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🌙 睡前伴读文库",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
                         )
-
-                        val favoriteCount = stories.count { it.isFavorite }
-                        FilterChip(
-                            selected = (currentTab == StoryTab.FAVORITES),
-                            onClick = { viewModel.setTab(StoryTab.FAVORITES) },
-                            label = {
-                                Text(
-                                    text = if (favoriteCount > 0) "❤️ 宝贝最爱 ($favoriteCount)" else "❤️ 宝贝最爱",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
                             shape = CircleShape,
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                labelColor = MaterialTheme.colorScheme.onSurface,
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = (currentTab == StoryTab.FAVORITES),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Text(
+                                text = "共 ${filteredAndSortedStories.size} 篇",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
-                        )
+                        }
                     }
 
                     // 多维排序下拉选择气泡
@@ -690,48 +658,7 @@ fun HomeScreen(
                 }
             }
 
-            // 3. 宝贝最爱为空时的治愈空状态
-            if (currentTab == StoryTab.FAVORITES && filteredAndSortedStories.isEmpty()) {
-                item(key = "empty_favorites_card") {
-                    OutlinedCard(
-                        shape = MaterialTheme.shapes.large,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 20.dp),
-                        colors = CardDefaults.outlinedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(text = "❤️", fontSize = 42.sp)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "还没有收藏的故事哦",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "在文库中轻点任意故事右侧的红心，就能收录宝贝最爱听的睡前童话，在这里随时一键开播~",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 4. 故事卡片列表
+            // 3. 故事卡片列表
             items(displayStories, key = { it.id }) { story ->
                 val isCached = completedCaches.any { it.storyId == story.id && it.voiceProfileId == defaultVoice?.id }
                 val isCurrentPlaying = (playbackState.storyId == story.id && playbackState.isPlaying)
@@ -753,8 +680,8 @@ fun HomeScreen(
                 )
             }
 
-            // 5. “浏览更多经典童话”折叠展开按键（仅在精选文库模式且总数超过5篇时显示）
-            if (currentTab == StoryTab.ALL && filteredAndSortedStories.size > 5) {
+            // 4. “浏览更多经典童话”折叠展开按键（总数超过5篇时显示）
+            if (filteredAndSortedStories.size > 5) {
                 item(key = "toggle_more_stories_button") {
                     OutlinedButton(
                         onClick = { showAllStories = !showAllStories },

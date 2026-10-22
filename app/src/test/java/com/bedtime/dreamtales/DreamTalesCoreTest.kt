@@ -273,7 +273,7 @@ class DreamTalesCoreTest {
     }
 
     @Test
-    fun testFavoritesTabFiltering() {
+    fun testFavoritesFiltering() {
         val s1 = com.bedtime.dreamtales.data.local.entity.Story(id = 1, title = "S1", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = true)
         val s2 = com.bedtime.dreamtales.data.local.entity.Story(id = 2, title = "S2", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = false)
         val s3 = com.bedtime.dreamtales.data.local.entity.Story(id = 3, title = "S3", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = true)
