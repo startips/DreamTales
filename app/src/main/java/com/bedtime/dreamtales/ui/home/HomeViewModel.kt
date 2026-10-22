@@ -179,6 +179,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteVoiceProfile(profile: VoiceProfile, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = voiceRepository.deleteVoiceProfile(profile)
+            refreshCacheInfo()
+            onComplete(success)
+        }
+    }
+
     fun onStoryClicked(story: Story, onNavigateToPlayer: () -> Unit) {
         val currentPlayback = StoryPlaybackService.playbackState.value
         // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器

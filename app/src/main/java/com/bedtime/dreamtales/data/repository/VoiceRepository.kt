@@ -112,4 +112,60 @@ class VoiceRepository(private val context: Context) {
             voiceDao.setDefaultVoiceProfile(defaultOne.id)
         }
     }
+
+    /**
+     * 删除用户录入的专属音色，级联清理本地原始样本文件、关联的合成音频缓存，并安全兜底默认音色
+     */
+    suspend fun deleteVoiceProfile(profile: VoiceProfile): Boolean = withContext(Dispatchers.IO) {
+        // 1. 系统预置音色保护：如果是官方默认原生音色 (mimo:default)，禁止删除
+        if (profile.cloudVoiceId == "mimo:default") {
+            return@withContext false
+        }
+
+        // 2. 清理本地专属克隆录音文件
+        if (profile.localSamplePath.isNotBlank()) {
+            try {
+                val sampleFile = File(profile.localSamplePath)
+                if (sampleFile.exists()) {
+                    sampleFile.delete()
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
+        // 3. 清理该音色关联的本地故事音频缓存文件及数据库记录
+        try {
+            val audioDir = File(context.filesDir, "audio_caches")
+            if (audioDir.exists()) {
+                audioDir.listFiles()?.forEach { file ->
+                    if (file.name.contains("_voice_${profile.id}")) {
+                        file.delete()
+                    }
+                }
+            }
+            val cacheDao = db.storyAudioCacheDao()
+            val allCaches = cacheDao.getAllCachesSync()
+            allCaches.filter { it.voiceProfileId == profile.id }.forEach { cache ->
+                cacheDao.deleteCache(cache.storyId, cache.voiceProfileId)
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+
+        // 4. 删除数据库中的音色记录
+        voiceDao.deleteVoiceProfile(profile)
+
+        // 5. 兜底策略：如果删除的恰好是当前选中的活跃音色，自动回退到系统默认原生音色
+        val currentDefault = voiceDao.getDefaultVoiceProfileSync()
+        if (currentDefault == null || currentDefault.id == profile.id) {
+            val remaining = voiceDao.getAllVoiceProfilesSync()
+            val fallback = remaining.firstOrNull { it.cloudVoiceId == "mimo:default" } ?: remaining.firstOrNull()
+            if (fallback != null) {
+                voiceDao.setDefaultVoiceProfile(fallback.id)
+            }
+        }
+
+        true
+    }
 }

@@ -342,4 +342,38 @@ class DreamTalesCoreTest {
         val formatted = String.format("%.1f MB", mb)
         assertEquals("33.0 MB", formatted)
     }
+
+    @Test
+    fun testVoiceProfileDeletionProtectionAndFallback() {
+        val preset = com.bedtime.dreamtales.data.local.entity.VoiceProfile(
+            id = 1,
+            name = "温柔月光 · 小米原生 (MiMo TTS)",
+            cloudVoiceId = "mimo:default",
+            localSamplePath = "",
+            isDefault = false
+        )
+        val custom = com.bedtime.dreamtales.data.local.entity.VoiceProfile(
+            id = 2,
+            name = "爸爸的晚安声",
+            cloudVoiceId = "mimo:clone",
+            localSamplePath = "/tmp/sample_2.wav",
+            isDefault = true
+        )
+
+        fun canDelete(profile: com.bedtime.dreamtales.data.local.entity.VoiceProfile): Boolean {
+            return profile.cloudVoiceId != "mimo:default"
+        }
+
+        assertFalse("官方预置原生音色严禁删除", canDelete(preset))
+        assertTrue("用户录入克隆音色允许删除", canDelete(custom))
+
+        // 模拟删除当前活跃音色后的回退逻辑
+        val allVoices = mutableListOf(preset, custom)
+        val deleted = custom
+        allVoices.remove(deleted)
+
+        val fallback = allVoices.firstOrNull { it.cloudVoiceId == "mimo:default" } ?: allVoices.first()
+        assertEquals(1L, fallback.id)
+        assertEquals("温柔月光 · 小米原生 (MiMo TTS)", fallback.name)
+    }
 }

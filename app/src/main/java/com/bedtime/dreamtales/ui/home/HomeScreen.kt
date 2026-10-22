@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
@@ -153,6 +154,7 @@ fun HomeScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showAllStories by remember { mutableStateOf(false) }
+    var voiceToDelete by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.VoiceProfile?>(null) }
 
     val sheetState = rememberModalBottomSheetState()
     val focusManager = LocalFocusManager.current
@@ -943,13 +945,45 @@ fun HomeScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "已选择",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (voice.cloudVoiceId != "mimo:default") {
+                                        IconButton(
+                                            onClick = { voiceToDelete = voice },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.DeleteOutline,
+                                                contentDescription = "删除音色",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                            modifier = Modifier.padding(end = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "官方推荐",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "已选择",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -959,6 +993,59 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    // 删除音色确认弹窗
+    if (voiceToDelete != null) {
+        val targetVoice = voiceToDelete!!
+        AlertDialog(
+            onDismissRequest = { voiceToDelete = null },
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            title = {
+                Text(
+                    text = "确认删除该伴读音色？",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "将删除专属音色「${targetVoice.name}」，其本地录音样本及以此音色合成的历史音频也将一并清理。如果当前正在使用该音色，将自动切回官方默认音色。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val toDelete = targetVoice
+                        voiceToDelete = null
+                        viewModel.deleteVoiceProfile(toDelete) { success ->
+                            if (success) {
+                                Toast.makeText(context, "已成功删除音色「${toDelete.name}」", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("确认删除", style = MaterialTheme.typography.labelLarge)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { voiceToDelete = null },
+                    shape = CircleShape
+                ) {
+                    Text("取消", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        )
     }
 
     // 报错提示
