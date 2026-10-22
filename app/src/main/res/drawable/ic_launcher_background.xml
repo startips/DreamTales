@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 深度暖暗夜空背景 -->
+    <path
+        android:fillColor="#15141E"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- 柔和星空底色点缀 -->
+    <!-- 小星星 1 -->
+    <path
+        android:fillColor="#504530"
+        android:pathData="M24,28 L25.5,23.5 L30,22 L25.5,20.5 L24,16 L22.5,20.5 L18,22 L22.5,23.5 Z" />
+    
+    <!-- 小星星 2 -->
+    <path
+        android:fillColor="#453B2B"
+        android:pathData="M84,34 L85,31 L88,30 L85,29 L84,26 L83,29 L80,30 L83,31 Z" />
+
+    <!-- 小星尘微光点 -->
+    <path
+        android:fillColor="#3A3326"
+        android:pathData="M20,78 A1.5,1.5 0 1 0 20,81 A1.5,1.5 0 1 0 20,78 Z" />
+    <path
+        android:fillColor="#3A3326"
+        android:pathData="M88,72 A2,2 0 1 0 88,76 A2,2 0 1 0 88,72 Z" />
+</vector>

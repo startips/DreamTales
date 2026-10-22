@@ -1,0 +1,58 @@
+# Built application files
+*.apk
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+app/build/
+*/build/
+dist/
+
+# Gradle files
+.gradle/
+buildOutputCleanup/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+.shelf/
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Log Files
+*.log
+
+# Profiling and dumps
+captures/
+*.hprof
+
+# C/C++ native builds
+.externalNativeBuild/
+.cxx/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# OpenCode session runtime states (keep skills, ignore session logs/goals)
+.opencode/goals/
+.opencode/*.log

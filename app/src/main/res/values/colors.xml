@@ -1,0 +1,5 @@
+<resources>
+    <color name="background_dark">#121212</color>
+    <color name="text_warm_gray">#9E9E9E</color>
+    <color name="accent_warm_yellow">#E8C587</color>
+</resources>
