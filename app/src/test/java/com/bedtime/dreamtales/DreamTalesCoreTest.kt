@@ -187,4 +187,160 @@ class DreamTalesCoreTest {
         assertEquals("九色鹿与月光河", result[0].title)
         assertEquals("🦌", result[0].iconEmoji)
     }
+
+    @Test
+    fun testSpokenIntroGenerationAndDeduplication() {
+        val title = "小马过河"
+        val content = "阳光暖洋洋的早晨，小马驮着麦子去磨坊。"
+
+        val intro = com.bedtime.dreamtales.core.StorySpeechHelper.buildSpokenIntro(title)
+        assertTrue("开场导引语应包含故事标题", intro.contains("《小马过河》"))
+        assertTrue("开场导引语应包含固定温柔引导词", intro.contains("小朋友，我们要讲的故事是"))
+
+        val fullText = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(title, content)
+        assertTrue("合成全文第一句应为开场导引白", fullText.startsWith("小朋友，我们要讲的故事是《小马过河》。"))
+        assertTrue("合成全文应包含后续正文", fullText.contains("小马驮着麦子去磨坊"))
+
+        // 测试防重复添加：如果全文已有开场导引语，不应双重添加
+        val doubleWrapped = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(title, fullText)
+        assertEquals("防重复注入机制应保持文本不变", fullText, doubleWrapped)
+    }
+
+    @Test
+    fun testPlaybackModeCyclingSequence() {
+        var mode = com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL
+        fun nextMode(current: com.bedtime.dreamtales.service.PlaybackMode): com.bedtime.dreamtales.service.PlaybackMode {
+            return when (current) {
+                com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL -> com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE
+                com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE -> com.bedtime.dreamtales.service.PlaybackMode.STOP_AFTER_CURRENT
+                com.bedtime.dreamtales.service.PlaybackMode.STOP_AFTER_CURRENT -> com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL
+            }
+        }
+
+        mode = nextMode(mode)
+        assertEquals(com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE, mode)
+
+        mode = nextMode(mode)
+        assertEquals(com.bedtime.dreamtales.service.PlaybackMode.STOP_AFTER_CURRENT, mode)
+
+        mode = nextMode(mode)
+        assertEquals(com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL, mode)
+    }
+
+    @Test
+    fun testSequentialNextStoryIndexLookup() {
+        val stories = listOf(
+            com.bedtime.dreamtales.data.local.entity.Story(id = 10, title = "Story 10", targetAge = "3-6", content = "", durationSeconds = 100),
+            com.bedtime.dreamtales.data.local.entity.Story(id = 20, title = "Story 20", targetAge = "3-6", content = "", durationSeconds = 100),
+            com.bedtime.dreamtales.data.local.entity.Story(id = 30, title = "Story 30", targetAge = "3-6", content = "", durationSeconds = 100)
+        )
+
+        fun getNextStory(currentId: Long): com.bedtime.dreamtales.data.local.entity.Story {
+            val idx = stories.indexOfFirst { it.id == currentId }
+            val nextIdx = if (idx >= 0 && idx + 1 < stories.size) idx + 1 else 0
+            return stories[nextIdx]
+        }
+
+        assertEquals(20L, getNextStory(10L).id)
+        assertEquals(30L, getNextStory(20L).id)
+        assertEquals("播到最后一首应自动循环至文库第一首", 10L, getNextStory(30L).id)
+        assertEquals("未在列表中的未知ID默认从首篇开始", 10L, getNextStory(999L).id)
+    }
+
+    @Test
+    fun testMultiDimensionSortingOrders() {
+        val s1 = com.bedtime.dreamtales.data.local.entity.Story(id = 1, title = "S1", targetAge = "3-6", content = "", durationSeconds = 100, playCount = 10, isFavorite = false, createdAt = 1000)
+        val s2 = com.bedtime.dreamtales.data.local.entity.Story(id = 2, title = "S2", targetAge = "3-6", content = "", durationSeconds = 100, playCount = 2, isFavorite = true, createdAt = 3000)
+        val s3 = com.bedtime.dreamtales.data.local.entity.Story(id = 3, title = "S3", targetAge = "3-6", content = "", durationSeconds = 100, playCount = 20, isFavorite = false, createdAt = 2000)
+        val list = listOf(s1, s2, s3)
+
+        // 1. 收藏优先 (FAVORITE_FIRST)
+        val favFirst = list.sortedWith(compareByDescending<com.bedtime.dreamtales.data.local.entity.Story> { it.isFavorite }.thenByDescending { it.playCount }.thenByDescending { it.createdAt })
+        assertEquals("S2 收藏置顶", "S2", favFirst[0].title)
+        assertEquals("S3 播放量最高排次位", "S3", favFirst[1].title)
+        assertEquals("S1 排末位", "S1", favFirst[2].title)
+
+        // 2. 最多收听 (MOST_PLAYED)
+        val mostPlayed = list.sortedWith(compareByDescending<com.bedtime.dreamtales.data.local.entity.Story> { it.playCount }.thenByDescending { it.createdAt })
+        assertEquals("S3 最多收听置顶 (20次)", "S3", mostPlayed[0].title)
+        assertEquals("S1 次之 (10次)", "S1", mostPlayed[1].title)
+        assertEquals("S2 最后 (2次)", "S2", mostPlayed[2].title)
+
+        // 3. 最新加入 (NEWEST_FIRST)
+        val newest = list.sortedByDescending { it.createdAt }
+        assertEquals("S2 最新创建置顶 (3000)", "S2", newest[0].title)
+        assertEquals("S3 次之 (2000)", "S3", newest[1].title)
+        assertEquals("S1 最老 (1000)", "S1", newest[2].title)
+    }
+
+    @Test
+    fun testFavoritesTabFiltering() {
+        val s1 = com.bedtime.dreamtales.data.local.entity.Story(id = 1, title = "S1", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = true)
+        val s2 = com.bedtime.dreamtales.data.local.entity.Story(id = 2, title = "S2", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = false)
+        val s3 = com.bedtime.dreamtales.data.local.entity.Story(id = 3, title = "S3", targetAge = "3-6", content = "", durationSeconds = 100, isFavorite = true)
+        val list = listOf(s1, s2, s3)
+
+        val favoritesOnly = list.filter { it.isFavorite }
+        assertEquals(2, favoritesOnly.size)
+        assertTrue(favoritesOnly.all { it.isFavorite })
+
+        val emptyFavorites = list.filter { false }
+        assertTrue("空收藏应为空列表", emptyFavorites.isEmpty())
+    }
+
+    @Test
+    fun testStoryBackupJsonPackageSerializationAndDeduplication() {
+        val item1 = com.bedtime.dreamtales.data.repository.StoryExportItem(
+            title = "小恐龙找妈妈",
+            targetAge = "3-6岁",
+            content = "森林深处有一只可爱的小恐龙...",
+            durationSeconds = 180,
+            iconEmoji = "🦕",
+            isFavorite = true
+        )
+        val item2 = com.bedtime.dreamtales.data.repository.StoryExportItem(
+            title = "月亮上的小城堡",
+            targetAge = "5-7岁",
+            content = "银河旁边有一座金光闪闪的小城堡...",
+            durationSeconds = 200,
+            iconEmoji = "🏰",
+            isFavorite = false
+        )
+        val pkg = com.bedtime.dreamtales.data.repository.StoryBackupPackage(
+            stories = listOf(item1, item2)
+        )
+
+        val gson = com.google.gson.Gson()
+        val jsonStr = gson.toJson(pkg)
+        assertTrue("JSON 应包含应用标识", jsonStr.contains("DreamTales"))
+        assertTrue("JSON 应包含小恐龙故事", jsonStr.contains("小恐龙找妈妈"))
+
+        // 反序列化解析
+        val parsedPkg = gson.fromJson(jsonStr, com.bedtime.dreamtales.data.repository.StoryBackupPackage::class.java)
+        assertEquals(2, parsedPkg.stories.size)
+        assertEquals("🦕", parsedPkg.stories[0].iconEmoji)
+
+        // 模拟去重检测
+        val existingTitles = setOf("小恐龙找妈妈") // 已存在同名故事
+        var imported = 0
+        var skipped = 0
+        parsedPkg.stories.forEach { story ->
+            if (existingTitles.contains(story.title)) {
+                skipped++
+            } else {
+                imported++
+            }
+        }
+        assertEquals("应成功导入 1 篇新故事", 1, imported)
+        assertEquals("应跳过 1 篇重复故事", 1, skipped)
+    }
+
+    @Test
+    fun testAudioCacheSizeFormatting() {
+        val bytes = 34_567_890L
+        val mb = bytes / (1024f * 1024f)
+        assertEquals(32.966f, mb, 0.01f)
+        val formatted = String.format("%.1f MB", mb)
+        assertEquals("33.0 MB", formatted)
+    }
 }

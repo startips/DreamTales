@@ -7,16 +7,30 @@ import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
+import com.bedtime.dreamtales.data.repository.ImportResult
 import com.bedtime.dreamtales.data.repository.StoryRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
+import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackService
 import com.bedtime.dreamtales.service.StoryPlaybackState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+enum class StoryTab {
+    ALL,        // 🌙 精选文库
+    FAVORITES   // ❤️ 宝贝最爱
+}
+
+enum class StorySortOrder(val label: String) {
+    FAVORITE_FIRST("❤️ 收藏优先"),
+    MOST_PLAYED("🔥 最多收听"),
+    NEWEST_FIRST("⏱️ 最新加入")
+}
 
 sealed class SynthesisUiState {
     object Idle : SynthesisUiState()
@@ -57,6 +71,42 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _themeMode = MutableStateFlow(appConfig.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
+    private val _currentTab = MutableStateFlow(StoryTab.ALL)
+    val currentTab: StateFlow<StoryTab> = _currentTab.asStateFlow()
+
+    private val _sortOrder = MutableStateFlow(StorySortOrder.FAVORITE_FIRST)
+    val sortOrder: StateFlow<StorySortOrder> = _sortOrder.asStateFlow()
+
+    val filteredAndSortedStories: StateFlow<List<Story>> = combine(
+        storyRepository.getAllStories(),
+        _currentTab,
+        _sortOrder
+    ) { all, tab, sort ->
+        val base = when (tab) {
+            StoryTab.ALL -> all
+            StoryTab.FAVORITES -> all.filter { it.isFavorite }
+        }
+        when (sort) {
+            StorySortOrder.FAVORITE_FIRST -> base.sortedWith(
+                compareByDescending<Story> { it.isFavorite }
+                    .thenByDescending { it.playCount }
+                    .thenByDescending { it.createdAt }
+            )
+            StorySortOrder.MOST_PLAYED -> base.sortedWith(
+                compareByDescending<Story> { it.playCount }
+                    .thenByDescending { it.createdAt }
+            )
+            StorySortOrder.NEWEST_FIRST -> base.sortedByDescending { it.createdAt }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 缓存统计与状态
+    private val _cacheSizeMb = MutableStateFlow(0.0f)
+    val cacheSizeMb: StateFlow<Float> = _cacheSizeMb.asStateFlow()
+
+    private val _cacheCount = MutableStateFlow(0)
+    val cacheCount: StateFlow<Int> = _cacheCount.asStateFlow()
+
     init {
         viewModelScope.launch {
             storyRepository.ensureClassicStoriesPopulated()
@@ -65,6 +115,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (voice != null) {
                 storyRepository.preCacheUpcomingStories(voice)
             }
+            refreshCacheInfo()
         }
     }
 
@@ -74,9 +125,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _generationState = MutableStateFlow<StoryGenerationUiState>(StoryGenerationUiState.Idle)
     val generationState: StateFlow<StoryGenerationUiState> = _generationState.asStateFlow()
 
+    fun setTab(tab: StoryTab) {
+        _currentTab.value = tab
+    }
+
+    fun setSortOrder(order: StorySortOrder) {
+        _sortOrder.value = order
+    }
+
     fun setThemeMode(mode: String) {
         appConfig.setThemeMode(mode)
         _themeMode.value = mode
+    }
+
+    fun setPlaybackMode(mode: PlaybackMode) {
+        appConfig.setPlaybackMode(mode.name)
+    }
+
+    fun refreshCacheInfo() {
+        viewModelScope.launch {
+            val bytes = storyRepository.getAudioCacheSizeBytes()
+            _cacheSizeMb.value = bytes / (1024f * 1024f)
+            _cacheCount.value = storyRepository.getAudioCacheCount()
+        }
+    }
+
+    fun clearAudioCaches(onCleared: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = storyRepository.clearAllAudioCaches()
+            refreshCacheInfo()
+            onCleared(success)
+        }
+    }
+
+    suspend fun exportStoriesToJson(selectedStoryIds: Set<Long> = emptySet()): String {
+        return storyRepository.exportStoriesToJson(selectedStoryIds)
+    }
+
+    suspend fun importStoriesFromJson(jsonContent: String): ImportResult {
+        return storyRepository.importStoriesFromJson(jsonContent)
     }
 
     fun toggleFavorite(story: Story) {

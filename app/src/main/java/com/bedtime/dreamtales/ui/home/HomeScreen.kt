@@ -1,5 +1,10 @@
 package com.bedtime.dreamtales.ui.home
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -40,10 +45,10 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +61,8 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -78,14 +85,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,13 +103,18 @@ import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
+import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackState
 import com.bedtime.dreamtales.ui.settings.AboutDialog
-import com.bedtime.dreamtales.ui.settings.ThemeSettingsDialog
+import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
+import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
+import com.bedtime.dreamtales.ui.settings.SettingsDialog
+import kotlinx.coroutines.launch
 
 /**
  * 遵循 Material Design 3 规范的主页文库。
- * 具备故事自由搜索（候选卡片二次确认）、主页精选 Top 5 排行与展开、红心收藏、右上角标准设置体系。
+ * 具备故事自由搜索（候选卡片二次确认）、收藏专区（❤️ 宝贝最爱）、多维排序（收藏/热度/时间）、
+ * 以及包含书单导入导出、缓存清理与双模式护眼色调的现代设置体系。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,6 +125,9 @@ fun HomeScreen(
     onTogglePlayPause: () -> Unit,
     onPlayStory: (Story, String) -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val stories by viewModel.stories.collectAsState()
     val defaultVoice by viewModel.defaultVoice.collectAsState()
     val allVoices by viewModel.allVoices.collectAsState()
@@ -119,10 +137,20 @@ fun HomeScreen(
     val generationState by viewModel.generationState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
 
+    val currentTab by viewModel.currentTab.collectAsState()
+    val sortOrder by viewModel.sortOrder.collectAsState()
+    val filteredAndSortedStories by viewModel.filteredAndSortedStories.collectAsState()
+    val cacheSizeMb by viewModel.cacheSizeMb.collectAsState()
+    val cacheCount by viewModel.cacheCount.collectAsState()
+
     var showVoiceSheet by remember { mutableStateOf(false) }
-    var showThemeDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showClearCacheConfirm by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showAllStories by remember { mutableStateOf(false) }
 
@@ -148,17 +176,15 @@ fun HomeScreen(
         }
     }
 
-    // 筛选前 5 篇播放热度最高故事
-    val top5Stories = remember(stories) {
-        stories.sortedWith(compareByDescending<Story> { it.isFavorite }.thenByDescending { it.playCount }).take(5)
-    }
-    val remainingStories = remember(stories, top5Stories) {
-        stories.filter { it.id !in top5Stories.map { t -> t.id } }
-    }
-    val displayStories = if (showAllStories) {
-        stories.sortedWith(compareByDescending<Story> { it.isFavorite }.thenByDescending { it.playCount })
-    } else {
-        top5Stories
+    // 决定实际展示的故事列表
+    val displayStories = remember(filteredAndSortedStories, currentTab, showAllStories) {
+        if (currentTab == StoryTab.FAVORITES) {
+            // 收藏夹直接完整展示所有收藏故事
+            filteredAndSortedStories
+        } else {
+            // 精选文库下，默认收拢为前 5 篇，点击展开全部后再展示剩余
+            if (showAllStories) filteredAndSortedStories else filteredAndSortedStories.take(5)
+        }
     }
 
     Scaffold(
@@ -169,7 +195,7 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                // 顶部极简导航栏：Logo + 右上角标准更多菜单
+                // 顶部导航栏：Logo + 右上角标准更多菜单
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -201,13 +227,14 @@ fun HomeScreen(
                             onDismissRequest = { showTopMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("🎨 界面色调设置") },
+                                text = { Text("⚙️ 伴读与数据设置") },
                                 onClick = {
                                     showTopMenu = false
-                                    showThemeDialog = true
+                                    viewModel.refreshCacheInfo()
+                                    showSettingsDialog = true
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
                                 }
                             )
                             DropdownMenuItem(
@@ -493,37 +520,153 @@ fun HomeScreen(
                 }
             }
 
-            // 2. 故事文库大标题（视觉降噪版）
-            item(key = "story_list_header") {
+            // 2. 标签页切换栏（精选文库 vs 宝贝最爱）与 排序按钮
+            item(key = "tab_and_sort_bar") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (showAllStories) "🌙 全部伴读文库" else "🌙 今夜最爱 · 伴读精选 (Top 5)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {
-                        Text(
-                            text = if (showAllStories) "共 ${stories.size} 篇" else "精选 5 篇",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    // 标签页药丸切换
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = (currentTab == StoryTab.ALL),
+                            onClick = { viewModel.setTab(StoryTab.ALL) },
+                            label = { Text("🌙 精选文库 (${stories.size})", style = MaterialTheme.typography.labelSmall) },
+                            shape = CircleShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = (currentTab == StoryTab.ALL),
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = MaterialTheme.colorScheme.primary
+                            )
                         )
+
+                        val favoriteCount = stories.count { it.isFavorite }
+                        FilterChip(
+                            selected = (currentTab == StoryTab.FAVORITES),
+                            onClick = { viewModel.setTab(StoryTab.FAVORITES) },
+                            label = {
+                                Text(
+                                    text = if (favoriteCount > 0) "❤️ 宝贝最爱 ($favoriteCount)" else "❤️ 宝贝最爱",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            shape = CircleShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = (currentTab == StoryTab.FAVORITES),
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+
+                    // 多维排序下拉选择气泡
+                    Box {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.clickable { showSortMenu = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = sortOrder.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = "▾", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            StorySortOrder.values().forEach { order ->
+                                val isSelected = (order == sortOrder)
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = order.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setSortOrder(order)
+                                        showSortMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // 3. 故事卡片列表（降噪 1 行摘要 + 卡片内原位进度 + 红心收藏）
+            // 3. 宝贝最爱为空时的治愈空状态
+            if (currentTab == StoryTab.FAVORITES && filteredAndSortedStories.isEmpty()) {
+                item(key = "empty_favorites_card") {
+                    OutlinedCard(
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(text = "❤️", fontSize = 42.sp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "还没有收藏的故事哦",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "在文库中轻点任意故事右侧的红心，就能收录宝贝最爱听的睡前童话，在这里随时一键开播~",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. 故事卡片列表
             items(displayStories, key = { it.id }) { story ->
                 val isCached = completedCaches.any { it.storyId == story.id && it.voiceProfileId == defaultVoice?.id }
                 val isCurrentPlaying = (playbackState.storyId == story.id && playbackState.isPlaying)
@@ -545,8 +688,8 @@ fun HomeScreen(
                 )
             }
 
-            // 4. “浏览更多经典童话”折叠展开按键
-            if (remainingStories.isNotEmpty()) {
+            // 5. “浏览更多经典童话”折叠展开按键（仅在精选文库模式且总数超过5篇时显示）
+            if (currentTab == StoryTab.ALL && filteredAndSortedStories.size > 5) {
                 item(key = "toggle_more_stories_button") {
                     OutlinedButton(
                         onClick = { showAllStories = !showAllStories },
@@ -560,7 +703,7 @@ fun HomeScreen(
                         )
                     ) {
                         Text(
-                            text = if (showAllStories) "收起其余童话 ▴" else "浏览更多经典童话 (共 ${stories.size} 篇) ▾",
+                            text = if (showAllStories) "收起其余童话 ▴" else "浏览更多经典童话 (共 ${filteredAndSortedStories.size} 篇) ▾",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -570,18 +713,138 @@ fun HomeScreen(
         }
     }
 
-    // 色调设置弹窗
-    if (showThemeDialog) {
-        ThemeSettingsDialog(
-            currentMode = themeMode,
-            onModeSelected = { mode ->
+    // 设置主弹窗
+    if (showSettingsDialog) {
+        SettingsDialog(
+            currentThemeMode = themeMode,
+            currentPlaybackMode = playbackState.playbackMode,
+            cacheSizeMb = cacheSizeMb,
+            cacheCount = cacheCount,
+            onThemeModeSelected = { mode ->
                 viewModel.setThemeMode(mode)
             },
-            onDismiss = { showThemeDialog = false }
+            onPlaybackModeSelected = { mode ->
+                viewModel.setPlaybackMode(mode)
+            },
+            onOpenExport = {
+                showSettingsDialog = false
+                showExportDialog = true
+            },
+            onOpenImport = {
+                showSettingsDialog = false
+                showImportDialog = true
+            },
+            onClearCacheClick = {
+                showClearCacheConfirm = true
+            },
+            onDismiss = { showSettingsDialog = false }
         )
     }
 
-    // 关于弹窗
+    // 清理缓存确认弹窗
+    if (showClearCacheConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirm = false },
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            title = {
+                Text(
+                    text = "确认清理离线音频缓存？",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "清理后将删除本地已缓存的音频文件（释放约 ${String.format("%.1f", cacheSizeMb)} MB 空间）。故事文本与个人录音将完好保留，下次播放时会自动重新获取。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearCacheConfirm = false
+                        viewModel.clearAudioCaches { success ->
+                            if (success) {
+                                Toast.makeText(context, "离线音频缓存已彻底清理", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("确认清理", style = MaterialTheme.typography.labelLarge)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showClearCacheConfirm = false },
+                    shape = CircleShape
+                ) {
+                    Text("取消", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        )
+    }
+
+    // 故事书单多选导出弹窗
+    if (showExportDialog) {
+        ExportStoriesDialog(
+            allStories = stories,
+            onExportRequested = { selectedIds ->
+                showExportDialog = false
+                coroutineScope.launch {
+                    val jsonStr = viewModel.exportStoriesToJson(selectedIds)
+
+                    // 1. 复制到剪贴板，方便在任意地方粘贴
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("DreamTales故事书单", jsonStr))
+
+                    // 2. 调起系统原生分享（微信、文件管理、隔空等）
+                    val shareIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, jsonStr)
+                        type = "application/json"
+                    }
+                    try {
+                        context.startActivity(Intent.createChooser(shareIntent, "分享/备份 DreamTales 故事书单"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "故事书单已成功复制到剪贴板", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onDismiss = { showExportDialog = false }
+        )
+    }
+
+    // 故事书单导入弹窗
+    if (showImportDialog) {
+        ImportStoriesDialog(
+            onImportConfirmed = { jsonContent ->
+                showImportDialog = false
+                coroutineScope.launch {
+                    try {
+                        val result = viewModel.importStoriesFromJson(jsonContent)
+                        Toast.makeText(
+                            context,
+                            "导入完成！成功收录 ${result.importedCount} 篇新童话，跳过 ${result.skippedCount} 篇重复故事",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onDismiss = { showImportDialog = false }
+        )
+    }
+
+    // 关于应用弹窗
     if (showAboutDialog) {
         AboutDialog(
             onDismiss = { showAboutDialog = false }
@@ -988,7 +1251,7 @@ private fun VerticalStoryCard(
                         imageVector = if (story.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "收藏",
                         tint = if (story.isFavorite) WarmAlertRed else MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -1127,7 +1390,7 @@ private fun BottomMiniPlayer(
                             "⏸️ 倒计时已暂停 (${formatSeconds(playbackState.remainingTimerSeconds)}) · 轻点展开"
                         }
                     } else if (playbackState.isPlaying) {
-                        "正在伴读播放 · 轻点展开"
+                        "正在伴读播放 (${playbackState.playbackMode.title}) · 轻点展开"
                     } else {
                         "伴读已就绪 · 轻点展开"
                     }

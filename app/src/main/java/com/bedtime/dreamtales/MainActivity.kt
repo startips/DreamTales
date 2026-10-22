@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                                 playbackService?.playStoryAudio(
                                     storyId = story.id,
                                     storyTitle = story.title,
-                                    storyContent = story.content,
+                                    storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
                                     localFilePath = localFilePath,
                                     autoPlay = false
                                 )

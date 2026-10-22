@@ -19,7 +19,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.bedtime.dreamtales.MainActivity
+import com.bedtime.dreamtales.core.StorySpeechHelper
+import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.data.repository.StoryRepository
+import com.bedtime.dreamtales.data.repository.VoiceRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +37,12 @@ import java.io.File
 import kotlin.math.ln
 import kotlin.math.max
 
+enum class PlaybackMode(val title: String, val iconEmoji: String) {
+    SEQUENTIAL("顺序连播", "🔀"),
+    REPEAT_ONE("单曲循环", "🔁"),
+    STOP_AFTER_CURRENT("播完即止", "⏹️")
+}
+
 data class StoryPlaybackState(
     val storyId: Long = 0L,
     val storyTitle: String = "",
@@ -44,7 +54,8 @@ data class StoryPlaybackState(
     val selectedTimerMinutes: Int = 0,
     val isTimerActive: Boolean = false,
     val currentVolume: Float = 1.0f,
-    val currentSpeed: Float = 1.0f
+    val currentSpeed: Float = 1.0f,
+    val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL
 )
 
 class StoryPlaybackService : MediaSessionService() {
@@ -57,6 +68,10 @@ class StoryPlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var sleepTimerJob: Job? = null
     private var progressTrackingJob: Job? = null
+
+    private val storyRepository by lazy { StoryRepository(applicationContext) }
+    private val voiceRepository by lazy { VoiceRepository(applicationContext) }
+    private val appConfig by lazy { AppConfig.getInstance(applicationContext) }
 
     inner class PlaybackBinder : Binder() {
         fun getService(): StoryPlaybackService = this@StoryPlaybackService
@@ -85,7 +100,14 @@ class StoryPlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
+        val savedModeName = appConfig.getPlaybackMode()
+        val initialMode = try {
+            PlaybackMode.valueOf(savedModeName)
+        } catch (e: Exception) {
+            PlaybackMode.SEQUENTIAL
+        }
+        updateState { it.copy(playbackMode = initialMode) }
+        applyExoPlayerRepeatMode(initialMode)
 
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -105,6 +127,8 @@ class StoryPlaybackService : MediaSessionService() {
                     updateState {
                         it.copy(totalDurationMs = max(0L, exoPlayer.duration))
                     }
+                } else if (state == Player.STATE_ENDED) {
+                    handlePlaybackEnded()
                 }
             }
         })
@@ -213,6 +237,125 @@ class StoryPlaybackService : MediaSessionService() {
 
     fun seekTo(positionMs: Long) {
         exoPlayer.seekTo(positionMs)
+    }
+
+    fun setPlaybackMode(mode: PlaybackMode) {
+        appConfig.setPlaybackMode(mode.name)
+        updateState { it.copy(playbackMode = mode) }
+        applyExoPlayerRepeatMode(mode)
+    }
+
+    fun cyclePlaybackMode(): PlaybackMode {
+        val current = playbackState.value.playbackMode
+        val next = when (current) {
+            PlaybackMode.SEQUENTIAL -> PlaybackMode.REPEAT_ONE
+            PlaybackMode.REPEAT_ONE -> PlaybackMode.STOP_AFTER_CURRENT
+            PlaybackMode.STOP_AFTER_CURRENT -> PlaybackMode.SEQUENTIAL
+        }
+        setPlaybackMode(next)
+        return next
+    }
+
+    private fun applyExoPlayerRepeatMode(mode: PlaybackMode) {
+        exoPlayer.repeatMode = if (mode == PlaybackMode.REPEAT_ONE) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
+        }
+    }
+
+    fun playNext() {
+        playNextStoryInSequence()
+    }
+
+    fun playPrevious() {
+        serviceScope.launch {
+            val current = playbackState.value
+            val allStories = storyRepository.getAllStoriesSync()
+            if (allStories.isEmpty()) return@launch
+
+            val currentIndex = allStories.indexOfFirst { it.id == current.storyId }
+            val prevIndex = if (currentIndex > 0) {
+                currentIndex - 1
+            } else {
+                allStories.lastIndex
+            }
+            val prevStory = allStories[prevIndex]
+            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
+            if (defaultVoice != null) {
+                try {
+                    val filePath = storyRepository.getOrSynthesizeStoryAudio(prevStory, defaultVoice)
+                    storyRepository.recordStoryPlayed(prevStory.id)
+                    playStoryAudio(
+                        storyId = prevStory.id,
+                        storyTitle = prevStory.title,
+                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(prevStory.title, prevStory.content),
+                        localFilePath = filePath,
+                        autoPlay = true
+                    )
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    private fun handlePlaybackEnded() {
+        val current = playbackState.value
+        when (current.playbackMode) {
+            PlaybackMode.REPEAT_ONE -> {
+                exoPlayer.seekTo(0)
+                exoPlayer.play()
+            }
+            PlaybackMode.STOP_AFTER_CURRENT -> {
+                exoPlayer.pause()
+                exoPlayer.seekTo(0)
+                updateState { it.copy(isPlaying = false, currentPositionMs = 0L) }
+                updateNotification(current.storyTitle, isPlaying = false)
+            }
+            PlaybackMode.SEQUENTIAL -> {
+                if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
+                    exoPlayer.pause()
+                    updateState { it.copy(isPlaying = false) }
+                    return
+                }
+                playNextStoryInSequence()
+            }
+        }
+    }
+
+    private fun playNextStoryInSequence() {
+        serviceScope.launch {
+            delay(1500L) // 睡前呼吸间隔 1.5 秒
+            val current = playbackState.value
+            val allStories = storyRepository.getAllStoriesSync()
+            if (allStories.isEmpty()) return@launch
+
+            val currentIndex = allStories.indexOfFirst { it.id == current.storyId }
+            val nextIndex = if (currentIndex >= 0 && currentIndex + 1 < allStories.size) {
+                currentIndex + 1
+            } else {
+                0
+            }
+            val nextStory = allStories[nextIndex]
+            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
+            if (defaultVoice != null) {
+                try {
+                    val filePath = storyRepository.getOrSynthesizeStoryAudio(nextStory, defaultVoice)
+                    storyRepository.recordStoryPlayed(nextStory.id)
+                    playStoryAudio(
+                        storyId = nextStory.id,
+                        storyTitle = nextStory.title,
+                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(nextStory.title, nextStory.content),
+                        localFilePath = filePath,
+                        autoPlay = true
+                    )
+                } catch (e: Exception) {
+                    exoPlayer.pause()
+                    updateState { it.copy(isPlaying = false) }
+                }
+            }
+        }
     }
 
     /**

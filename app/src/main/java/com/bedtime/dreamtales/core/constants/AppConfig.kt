@@ -139,9 +139,18 @@ class AppConfig(context: Context) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
     }
 
+    fun getPlaybackMode(): String {
+        return prefs.getString(KEY_PLAYBACK_MODE, "SEQUENTIAL") ?: "SEQUENTIAL"
+    }
+
+    fun setPlaybackMode(mode: String) {
+        prefs.edit().putString(KEY_PLAYBACK_MODE, mode).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "dreamtales_secure_prefs"
         private const val KEY_THEME_MODE = "key_theme_mode"
+        private const val KEY_PLAYBACK_MODE = "key_playback_mode"
         private const val KEY_MIMO_API_KEY = "key_mimo_api_key"
         private const val KEY_BAILIAN_API_KEY = "key_bailian_api_key"
         private const val KEY_GEMINI_API_KEY = "key_gemini_api_key"

@@ -24,4 +24,10 @@ interface StoryAudioCacheDao {
 
     @Query("SELECT * FROM story_audio_caches WHERE isComplete = 1")
     fun getAllCompleteCaches(): Flow<List<StoryAudioCache>>
+
+    @Query("DELETE FROM story_audio_caches")
+    suspend fun clearAllCaches()
+
+    @Query("SELECT * FROM story_audio_caches")
+    suspend fun getAllCachesSync(): List<StoryAudioCache>
 }

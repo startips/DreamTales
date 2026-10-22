@@ -30,4 +30,20 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun seekTo(positionMs: Long) {
         playbackService?.seekTo(positionMs)
     }
+
+    fun cyclePlaybackMode() {
+        playbackService?.cyclePlaybackMode()
+    }
+
+    fun setPlaybackMode(mode: com.bedtime.dreamtales.service.PlaybackMode) {
+        playbackService?.setPlaybackMode(mode)
+    }
+
+    fun playNext() {
+        playbackService?.playNext()
+    }
+
+    fun playPrevious() {
+        playbackService?.playPrevious()
+    }
 }

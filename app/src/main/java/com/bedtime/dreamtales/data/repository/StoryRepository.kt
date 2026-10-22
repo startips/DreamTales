@@ -2,6 +2,7 @@ package com.bedtime.dreamtales.data.repository
 
 import android.content.Context
 import android.util.Base64
+import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.data.api.ApiClient
 import com.bedtime.dreamtales.data.api.CpaChatRequest
@@ -16,6 +17,7 @@ import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.StoryAudioCache
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -36,6 +38,8 @@ class StoryRepository(private val context: Context) {
 
     fun getAllStories(): Flow<List<Story>> = storyDao.getAllStories()
 
+    suspend fun getAllStoriesSync(): List<Story> = storyDao.getAllStoriesSync()
+
     fun getAllCompleteCaches(): Flow<List<StoryAudioCache>> = cacheDao.getAllCompleteCaches()
 
     suspend fun getStoryById(storyId: Long): Story? = storyDao.getStoryById(storyId)
@@ -46,6 +50,35 @@ class StoryRepository(private val context: Context) {
 
     suspend fun setFavorite(storyId: Long, isFavorite: Boolean) = withContext(Dispatchers.IO) {
         storyDao.setFavorite(storyId, isFavorite)
+    }
+
+    suspend fun getAudioCacheSizeBytes(): Long = withContext(Dispatchers.IO) {
+        val audioDir = File(context.filesDir, "audio_caches")
+        if (!audioDir.exists()) return@withContext 0L
+        audioDir.listFiles()?.filter { it.name.endsWith(".wav") }?.sumOf { it.length() } ?: 0L
+    }
+
+    suspend fun getAudioCacheCount(): Int = withContext(Dispatchers.IO) {
+        val audioDir = File(context.filesDir, "audio_caches")
+        if (!audioDir.exists()) return@withContext 0
+        audioDir.listFiles()?.count { it.name.endsWith(".wav") } ?: 0
+    }
+
+    suspend fun clearAllAudioCaches(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            cacheDao.clearAllCaches()
+            val audioDir = File(context.filesDir, "audio_caches")
+            if (audioDir.exists()) {
+                audioDir.listFiles()?.forEach { file ->
+                    if (file.name.endsWith(".wav")) {
+                        file.delete()
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     suspend fun ensureClassicStoriesPopulated() = withContext(Dispatchers.IO) {
@@ -164,6 +197,8 @@ class StoryRepository(private val context: Context) {
             )
         }
 
+        val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
+
         val request = MimoChatRequest(
             model = model,
             messages = listOf(
@@ -173,7 +208,7 @@ class StoryRepository(private val context: Context) {
                 ),
                 MimoMessage(
                     role = "assistant",
-                    content = story.content
+                    content = spokenStoryText
                 )
             ),
             audio = audioConfig
@@ -356,4 +391,130 @@ class StoryRepository(private val context: Context) {
         )
         generateFullStoryFromCandidate(candidate)
     }
+
+    /**
+     * 导出故事书单至标准 JSON 格式（支持多选故事导出或全量导出）
+     */
+    suspend fun exportStoriesToJson(selectedStoryIds: Set<Long> = emptySet()): String = withContext(Dispatchers.IO) {
+        val allStories = storyDao.getAllStoriesSync()
+        val targetStories = if (selectedStoryIds.isEmpty()) {
+            allStories
+        } else {
+            allStories.filter { it.id in selectedStoryIds }
+        }
+
+        val exportItems = targetStories.map { story ->
+            StoryExportItem(
+                title = story.title,
+                targetAge = story.targetAge,
+                content = story.content,
+                durationSeconds = story.durationSeconds,
+                dateLabel = story.dateLabel,
+                iconEmoji = story.iconEmoji,
+                isFavorite = story.isFavorite
+            )
+        }
+
+        val backupPackage = StoryBackupPackage(
+            app = "DreamTales",
+            version = "1.6.0",
+            exportedAt = System.currentTimeMillis(),
+            stories = exportItems
+        )
+
+        GsonBuilder().setPrettyPrinting().create().toJson(backupPackage)
+    }
+
+    /**
+     * 导入外部 JSON 故事书单（智能识别去重并持久化收录）
+     */
+    suspend fun importStoriesFromJson(jsonContent: String): ImportResult = withContext(Dispatchers.IO) {
+        val cleanJson = jsonContent.trim()
+            .removePrefix("```json").removePrefix("```")
+            .removeSuffix("```").trim()
+
+        if (cleanJson.isBlank()) {
+            throw IllegalArgumentException("导入内容不能为空")
+        }
+
+        val items: List<StoryExportItem> = try {
+            val pkg = Gson().fromJson(cleanJson, StoryBackupPackage::class.java)
+            if (pkg?.stories != null && pkg.stories.isNotEmpty()) {
+                pkg.stories
+            } else {
+                val listType = object : TypeToken<List<StoryExportItem>>() {}.type
+                Gson().fromJson(cleanJson, listType)
+            }
+        } catch (e: Exception) {
+            val listType = object : TypeToken<List<StoryExportItem>>() {}.type
+            Gson().fromJson(cleanJson, listType)
+        }
+
+        if (items.isNullOrEmpty()) {
+            throw IllegalArgumentException("未能从文件中解析出有效的故事数据")
+        }
+
+        val existingStories = storyDao.getAllStoriesSync()
+        val existingTitles = existingStories.map { it.title.trim() }.toSet()
+
+        var importedCount = 0
+        var skippedCount = 0
+        val newStories = mutableListOf<Story>()
+        val now = System.currentTimeMillis()
+
+        items.forEachIndexed { index, item ->
+            if (existingTitles.contains(item.title.trim())) {
+                skippedCount++
+            } else {
+                newStories.add(
+                    Story(
+                        title = item.title.trim(),
+                        targetAge = item.targetAge.ifBlank { "3-6岁" },
+                        content = item.content.trim(),
+                        durationSeconds = if (item.durationSeconds > 0) item.durationSeconds else 180,
+                        isAiGenerated = true,
+                        dateLabel = item.dateLabel.ifBlank { "外部收录" },
+                        iconEmoji = item.iconEmoji.ifBlank { "🌙" },
+                        isFavorite = item.isFavorite,
+                        playCount = 0,
+                        createdAt = now - (index * 50)
+                    )
+                )
+                importedCount++
+            }
+        }
+
+        if (newStories.isNotEmpty()) {
+            storyDao.insertAll(newStories)
+        }
+
+        ImportResult(
+            totalFound = items.size,
+            importedCount = importedCount,
+            skippedCount = skippedCount
+        )
+    }
 }
+
+data class StoryExportItem(
+    val title: String = "",
+    val targetAge: String = "3-6岁",
+    val content: String = "",
+    val durationSeconds: Int = 180,
+    val dateLabel: String = "经典童话",
+    val iconEmoji: String = "🌙",
+    val isFavorite: Boolean = false
+)
+
+data class StoryBackupPackage(
+    val app: String = "DreamTales",
+    val version: String = "1.6.0",
+    val exportedAt: Long = System.currentTimeMillis(),
+    val stories: List<StoryExportItem> = emptyList()
+)
+
+data class ImportResult(
+    val totalFound: Int,
+    val importedCount: Int,
+    val skippedCount: Int
+)
