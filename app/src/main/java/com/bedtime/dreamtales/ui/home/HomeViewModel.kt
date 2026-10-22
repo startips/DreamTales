@@ -280,7 +280,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         var curr: Throwable? = e
         while (curr != null) {
             if (curr is com.bedtime.dreamtales.core.utils.RateLimitExceededException) {
-                return curr.message ?: "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟限10次请求，请稍候再试）"
+                return curr.message ?: "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟限5次请求，请稍候再试）"
             }
             curr = curr.cause
         }

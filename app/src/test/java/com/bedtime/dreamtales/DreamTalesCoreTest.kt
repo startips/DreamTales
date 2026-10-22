@@ -401,23 +401,23 @@ class DreamTalesCoreTest {
     }
 
     @Test
-    fun testApiRateLimiterAllowsUpTo10RequestsPerMinute() {
+    fun testApiRateLimiterAllowsUpTo5RequestsPerMinute() {
         val limiter = com.bedtime.dreamtales.core.utils.ApiRateLimiter
         limiter.resetForTest()
 
         val baseTime = 1_000_000L
 
-        // 前 10 次请求均应被允许
-        for (i in 1..10) {
+        // 前 5 次请求均应被允许
+        for (i in 1..5) {
             val result = limiter.acquirePermission(currentTime = baseTime + i * 100)
             assertTrue("第 $i 次请求应在限额内允许放行", result is com.bedtime.dreamtales.core.utils.ApiRateLimiter.Result.Allowed)
             val allowed = result as com.bedtime.dreamtales.core.utils.ApiRateLimiter.Result.Allowed
-            assertEquals(10 - i, allowed.remaining)
+            assertEquals(5 - i, allowed.remaining)
         }
 
-        // 第 11 次请求应被拦截并返回超限提示
+        // 第 6 次请求应被拦截并返回超限提示
         val exceeded = limiter.acquirePermission(currentTime = baseTime + 2000L)
-        assertTrue("第 11 次请求应当超限拦截", exceeded is com.bedtime.dreamtales.core.utils.ApiRateLimiter.Result.Exceeded)
+        assertTrue("第 6 次请求应当超限拦截", exceeded is com.bedtime.dreamtales.core.utils.ApiRateLimiter.Result.Exceeded)
         val ex = exceeded as com.bedtime.dreamtales.core.utils.ApiRateLimiter.Result.Exceeded
         assertTrue("等待秒数应在 1 到 60 秒之间", ex.waitSeconds in 1..60)
 
@@ -436,6 +436,6 @@ class DreamTalesCoreTest {
         )
         assertTrue("异常消息应包含温和安抚语", ex.message.contains("小耳朵也要歇一歇"))
         assertTrue("异常消息应包含等待秒数", ex.message.contains("35 秒"))
-        assertTrue("异常消息应包含限速规则说明", ex.message.contains("每分钟最多请求10次"))
+        assertTrue("异常消息应包含限速规则说明", ex.message.contains("每分钟最多请求5次"))
     }
 }

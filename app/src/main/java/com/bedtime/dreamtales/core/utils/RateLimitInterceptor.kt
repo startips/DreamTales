@@ -12,14 +12,14 @@ import kotlin.math.max
  */
 class RateLimitExceededException(
     val retryAfterSeconds: Int,
-    override val message: String = "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟最多请求10次，请等候 ${retryAfterSeconds} 秒后再试）"
+    override val message: String = "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟最多请求5次，请等候 ${retryAfterSeconds} 秒后再试）"
 ) : IOException(message)
 
 /**
- * 底层 API 请求滑动窗口限速器（严格保证每分钟至多 10 次请求）
+ * 底层 API 请求滑动窗口限速器（严格保证每分钟至多 5 次请求）
  */
 object ApiRateLimiter {
-    const val MAX_REQUESTS_PER_MINUTE = 10
+    const val MAX_REQUESTS_PER_MINUTE = 5
     const val WINDOW_MILLIS = 60_000L
 
     private val requestTimestamps = ArrayDeque<Long>()
@@ -93,12 +93,12 @@ class RateLimitInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
 
-        // 1. 底层 API 严格限频：每分钟最多 10 次请求
+        // 1. 底层 API 严格限频：每分钟最多 5 次请求
         when (val result = ApiRateLimiter.acquirePermission()) {
             is ApiRateLimiter.Result.Exceeded -> {
                 throw RateLimitExceededException(
                     retryAfterSeconds = result.waitSeconds,
-                    message = "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟最多请求10次，请等候 ${result.waitSeconds} 秒后再试）"
+                    message = "🌙 伴读提示：故事讲得有点快啦，小耳朵也要歇一歇哦～（每分钟最多请求5次，请等候 ${result.waitSeconds} 秒后再试）"
                 )
             }
             is ApiRateLimiter.Result.Allowed -> {
