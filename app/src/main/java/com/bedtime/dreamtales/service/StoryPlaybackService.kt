@@ -3,8 +3,11 @@ package com.bedtime.dreamtales.service
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -38,9 +41,19 @@ import kotlin.math.ln
 import kotlin.math.max
 
 enum class PlaybackMode(val title: String, val iconEmoji: String) {
-    SEQUENTIAL("顺序连播", "🔀"),
-    REPEAT_ONE("单曲循环", "🔁"),
+    SEQUENTIAL("顺序连播", "🔁"),
+    SHUFFLE("随机播放", "🔀"),
+    REPEAT_ONE("单曲循环", "🔂"),
     STOP_AFTER_CURRENT("播完即止", "⏹️")
+}
+
+enum class AmbientSound(val id: String, val title: String, val iconEmoji: String, val assetName: String?) {
+    OFF("off", "无背景音", "🚫", null),
+    RAIN("rain", "森林细雨", "🌧️", "ambient/ambient_rain.wav"),
+    WAVES("waves", "宁静海浪", "🌊", "ambient/ambient_waves.wav"),
+    FIRE("fire", "壁炉柴火", "🔥", "ambient/ambient_fire.wav"),
+    CRICKETS("crickets", "夏夜虫鸣", "🌾", "ambient/ambient_crickets.wav"),
+    LULLABY("lullaby", "摇篮音盒", "🎶", "ambient/ambient_lullaby.wav")
 }
 
 data class StoryPlaybackState(
@@ -54,14 +67,18 @@ data class StoryPlaybackState(
     val selectedTimerMinutes: Int = 0,
     val isTimerActive: Boolean = false,
     val currentVolume: Float = 1.0f,
+    val systemVolumeRatio: Float = 1.0f,
     val currentSpeed: Float = 1.0f,
-    val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL
+    val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
+    val ambientSound: AmbientSound = AmbientSound.OFF,
+    val ambientVolume: Float = 0.25f
 )
 
 class StoryPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
+    private lateinit var ambientPlayer: ExoPlayer
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val binder = PlaybackBinder()
@@ -69,9 +86,18 @@ class StoryPlaybackService : MediaSessionService() {
     private var sleepTimerJob: Job? = null
     private var progressTrackingJob: Job? = null
 
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val storyRepository by lazy { StoryRepository(applicationContext) }
     private val voiceRepository by lazy { VoiceRepository(applicationContext) }
     private val appConfig by lazy { AppConfig.getInstance(applicationContext) }
+
+    private var fadeMultiplier: Float = 1.0f
+
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateVolumeState()
+        }
+    }
 
     inner class PlaybackBinder : Binder() {
         fun getService(): StoryPlaybackService = this@StoryPlaybackService
@@ -89,7 +115,7 @@ class StoryPlaybackService : MediaSessionService() {
             setReferenceCounted(false)
         }
 
-        // 2. 初始化 ExoPlayer
+        // 2. 初始化 ExoPlayer（故事主声道）
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
             .setUsage(C.USAGE_MEDIA)
@@ -99,6 +125,18 @@ class StoryPlaybackService : MediaSessionService() {
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+
+        // 3. 初始化 AmbientPlayer（双轨助眠白噪音背景音）
+        val ambientAudioAttributes = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        ambientPlayer = ExoPlayer.Builder(this)
+            .setAudioAttributes(ambientAudioAttributes, false)
+            .build().apply {
+                repeatMode = Player.REPEAT_MODE_ONE
+            }
 
         val savedModeName = appConfig.getPlaybackMode()
         val initialMode = try {
@@ -116,9 +154,13 @@ class StoryPlaybackService : MediaSessionService() {
                     acquireWakeLock()
                     startProgressTracker()
                     updateNotification(playbackState.value.storyTitle, isPlaying = true)
+                    if (playbackState.value.ambientSound != AmbientSound.OFF && ambientPlayer.mediaItemCount > 0) {
+                        ambientPlayer.play()
+                    }
                 } else {
                     releaseWakeLock()
                     updateNotification(playbackState.value.storyTitle, isPlaying = false)
+                    ambientPlayer.pause()
                 }
             }
 
@@ -133,7 +175,20 @@ class StoryPlaybackService : MediaSessionService() {
             }
         })
 
-        // 3. 构建 MediaSession
+        // 4. 监听手机硬件系统音量变动
+        try {
+            val filter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(volumeReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(volumeReceiver, filter)
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        updateVolumeState()
+
+        // 5. 构建 MediaSession
         val sessionIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -188,15 +243,17 @@ class StoryPlaybackService : MediaSessionService() {
             return
         }
 
+        fadeMultiplier = 1.0f
         exoPlayer.volume = 1.0f
         exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyAmbientVolume()
+        updateVolumeState()
 
         updateState {
             it.copy(
                 storyId = storyId,
                 storyTitle = storyTitle,
                 storyContent = storyContent,
-                currentVolume = 1.0f,
                 currentSpeed = 1.0f,
                 isPlaying = autoPlay
             )
@@ -248,7 +305,8 @@ class StoryPlaybackService : MediaSessionService() {
     fun cyclePlaybackMode(): PlaybackMode {
         val current = playbackState.value.playbackMode
         val next = when (current) {
-            PlaybackMode.SEQUENTIAL -> PlaybackMode.REPEAT_ONE
+            PlaybackMode.SEQUENTIAL -> PlaybackMode.SHUFFLE
+            PlaybackMode.SHUFFLE -> PlaybackMode.REPEAT_ONE
             PlaybackMode.REPEAT_ONE -> PlaybackMode.STOP_AFTER_CURRENT
             PlaybackMode.STOP_AFTER_CURRENT -> PlaybackMode.SEQUENTIAL
         }
@@ -264,11 +322,104 @@ class StoryPlaybackService : MediaSessionService() {
         }
     }
 
+    fun setAmbientSound(ambient: AmbientSound) {
+        updateState { it.copy(ambientSound = ambient) }
+        if (ambient == AmbientSound.OFF || ambient.assetName == null) {
+            ambientPlayer.stop()
+            ambientPlayer.clearMediaItems()
+        } else {
+            val mediaItem = MediaItem.fromUri("asset:///${ambient.assetName}")
+            ambientPlayer.setMediaItem(mediaItem)
+            ambientPlayer.prepare()
+            applyAmbientVolume()
+            if (exoPlayer.isPlaying) {
+                ambientPlayer.play()
+            }
+        }
+    }
+
+    fun setAmbientVolume(volume: Float) {
+        val clamped = volume.coerceIn(0.0f, 1.0f)
+        updateState { it.copy(ambientVolume = clamped) }
+        applyAmbientVolume()
+    }
+
+    private fun applyAmbientVolume() {
+        val state = playbackState.value
+        ambientPlayer.volume = (state.ambientVolume * fadeMultiplier).coerceIn(0.0f, 1.0f)
+    }
+
+    private fun getSystemVolumeRatio(): Float {
+        return try {
+            val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (max > 0) cur.toFloat() / max.toFloat() else 1.0f
+        } catch (e: Exception) {
+            1.0f
+        }
+    }
+
+    private fun updateVolumeState() {
+        val sysRatio = getSystemVolumeRatio()
+        val effectiveVol = sysRatio * fadeMultiplier
+        updateState {
+            it.copy(
+                systemVolumeRatio = sysRatio,
+                currentVolume = effectiveVol
+            )
+        }
+    }
+
     fun playNext() {
-        playNextStoryInSequence()
+        val current = playbackState.value
+        if (current.playbackMode == PlaybackMode.SHUFFLE) {
+            playRandomStory()
+        } else {
+            playNextStoryInSequence()
+        }
     }
 
     fun playPrevious() {
+        val current = playbackState.value
+        if (current.playbackMode == PlaybackMode.SHUFFLE) {
+            playRandomStory()
+        } else {
+            playPreviousStoryInSequence()
+        }
+    }
+
+    private fun playRandomStory() {
+        serviceScope.launch {
+            val current = playbackState.value
+            val allStories = storyRepository.getAllStoriesSync()
+            if (allStories.isEmpty()) return@launch
+
+            val candidates = if (allStories.size > 1) {
+                allStories.filter { it.id != current.storyId }
+            } else {
+                allStories
+            }
+            val randomStory = candidates.random()
+            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
+            if (defaultVoice != null) {
+                try {
+                    val filePath = storyRepository.getOrSynthesizeStoryAudio(randomStory, defaultVoice)
+                    storyRepository.recordStoryPlayed(randomStory.id)
+                    playStoryAudio(
+                        storyId = randomStory.id,
+                        storyTitle = randomStory.title,
+                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(randomStory.title, randomStory.content),
+                        localFilePath = filePath,
+                        autoPlay = true
+                    )
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    private fun playPreviousStoryInSequence() {
         serviceScope.launch {
             val current = playbackState.value
             val allStories = storyRepository.getAllStoriesSync()
@@ -309,13 +460,27 @@ class StoryPlaybackService : MediaSessionService() {
             }
             PlaybackMode.STOP_AFTER_CURRENT -> {
                 exoPlayer.pause()
+                ambientPlayer.pause()
                 exoPlayer.seekTo(0)
                 updateState { it.copy(isPlaying = false, currentPositionMs = 0L) }
                 updateNotification(current.storyTitle, isPlaying = false)
             }
+            PlaybackMode.SHUFFLE -> {
+                if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
+                    exoPlayer.pause()
+                    ambientPlayer.pause()
+                    updateState { it.copy(isPlaying = false) }
+                    return
+                }
+                serviceScope.launch {
+                    delay(1500L)
+                    playRandomStory()
+                }
+            }
             PlaybackMode.SEQUENTIAL -> {
                 if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
                     exoPlayer.pause()
+                    ambientPlayer.pause()
                     updateState { it.copy(isPlaying = false) }
                     return
                 }
@@ -352,6 +517,7 @@ class StoryPlaybackService : MediaSessionService() {
                     )
                 } catch (e: Exception) {
                     exoPlayer.pause()
+                    ambientPlayer.pause()
                     updateState { it.copy(isPlaying = false) }
                 }
             }
@@ -370,17 +536,20 @@ class StoryPlaybackService : MediaSessionService() {
         sleepTimerJob?.cancel()
         val totalSeconds = durationMinutes * 60
 
+        fadeMultiplier = 1.0f
+        exoPlayer.volume = 1.0f
+        exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyAmbientVolume()
+        updateVolumeState()
+
         updateState {
             it.copy(
                 remainingTimerSeconds = totalSeconds,
                 selectedTimerMinutes = durationMinutes,
                 isTimerActive = true,
-                currentVolume = 1.0f,
                 currentSpeed = 1.0f
             )
         }
-        exoPlayer.volume = 1.0f
-        exoPlayer.playbackParameters = PlaybackParameters(1.0f)
 
         sleepTimerJob = serviceScope.launch {
             var remaining = totalSeconds
@@ -412,34 +581,39 @@ class StoryPlaybackService : MediaSessionService() {
                     }
 
                     // 2. 按照对数声学衰减曲线平滑降低音量至 0.0f
-                    // p 为声学剩余占比 [0.0, 1.0]
                     val p = (remaining.toDouble() / fadeThresholdSeconds.toDouble()).coerceIn(0.0, 1.0)
                     val logarithmicVolume = (ln(1.0 + 9.0 * p) / ln(10.0)).toFloat().coerceIn(0.0f, 1.0f)
-                    exoPlayer.volume = logarithmicVolume
+
+                    fadeMultiplier = logarithmicVolume
+                    exoPlayer.volume = fadeMultiplier
+                    applyAmbientVolume()
+                    updateVolumeState()
 
                     updateState {
                         it.copy(
                             remainingTimerSeconds = remaining,
-                            currentVolume = logarithmicVolume,
                             currentSpeed = currentSpeed
                         )
                     }
                 } else {
+                    updateVolumeState()
                     updateState { it.copy(remainingTimerSeconds = remaining) }
                 }
             }
 
             // 倒计时归零：执行停播与资源释放
             if (remaining <= 0) {
+                fadeMultiplier = 0.0f
                 exoPlayer.pause()
+                ambientPlayer.pause()
                 releaseWakeLock()
+                updateVolumeState()
                 updateState {
                     it.copy(
                         remainingTimerSeconds = 0,
                         selectedTimerMinutes = 0,
                         isTimerActive = false,
-                        isPlaying = false,
-                        currentVolume = 0.0f
+                        isPlaying = false
                     )
                 }
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -450,14 +624,16 @@ class StoryPlaybackService : MediaSessionService() {
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
+        fadeMultiplier = 1.0f
         exoPlayer.volume = 1.0f
         exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyAmbientVolume()
+        updateVolumeState()
         updateState {
             it.copy(
                 remainingTimerSeconds = 0,
                 selectedTimerMinutes = 0,
                 isTimerActive = false,
-                currentVolume = 1.0f,
                 currentSpeed = 1.0f
             )
         }
@@ -467,6 +643,7 @@ class StoryPlaybackService : MediaSessionService() {
         progressTrackingJob?.cancel()
         progressTrackingJob = serviceScope.launch {
             while (isActive && exoPlayer.isPlaying) {
+                updateVolumeState()
                 updateState {
                     it.copy(
                         currentPositionMs = exoPlayer.currentPosition,
@@ -539,6 +716,14 @@ class StoryPlaybackService : MediaSessionService() {
         sleepTimerJob?.cancel()
         progressTrackingJob?.cancel()
         releaseWakeLock()
+        try {
+            unregisterReceiver(volumeReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        if (::ambientPlayer.isInitialized) {
+            ambientPlayer.release()
+        }
         mediaSession?.run {
             player.release()
             release()

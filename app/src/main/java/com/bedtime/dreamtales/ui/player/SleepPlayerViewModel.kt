@@ -46,4 +46,12 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun playPrevious() {
         playbackService?.playPrevious()
     }
+
+    fun setAmbientSound(ambient: com.bedtime.dreamtales.service.AmbientSound) {
+        playbackService?.setAmbientSound(ambient)
+    }
+
+    fun setAmbientVolume(volume: Float) {
+        playbackService?.setAmbientVolume(volume)
+    }
 }

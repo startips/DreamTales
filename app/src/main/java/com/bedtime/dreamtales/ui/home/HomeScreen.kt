@@ -213,74 +213,51 @@ fun HomeScreen(
                         )
                     }
 
-                    // 右上角操作区：录入童话快捷键 + 常规 APP 菜单体系
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        FilledTonalButton(
-                            onClick = { showAddStoryDialog = true },
-                            shape = CircleShape,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                                contentColor = MaterialTheme.colorScheme.primary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 11.dp, vertical = 4.dp),
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "录入童话",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold
+                    // 右上角常规 APP 菜单体系
+                    Box {
+                        IconButton(onClick = { showTopMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "更多设置",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(2.dp))
-
-                        Box {
-                            IconButton(onClick = { showTopMenu = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "更多设置",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = showTopMenu,
-                                onDismissRequest = { showTopMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("✍️ 手动/粘贴录入新故事") },
-                                    onClick = {
-                                        showTopMenu = false
-                                        showAddStoryDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("⚙️ 伴读与数据设置") },
-                                    onClick = {
-                                        showTopMenu = false
-                                        viewModel.refreshCacheInfo()
-                                        showSettingsDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("ℹ️ 关于 DreamTales") },
-                                    onClick = {
-                                        showTopMenu = false
-                                        showAboutDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                )
-                            }
+                        DropdownMenu(
+                            expanded = showTopMenu,
+                            onDismissRequest = { showTopMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("✍️ 手动/粘贴录入新故事") },
+                                onClick = {
+                                    showTopMenu = false
+                                    showAddStoryDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("⚙️ 伴读与数据设置") },
+                                onClick = {
+                                    showTopMenu = false
+                                    viewModel.refreshCacheInfo()
+                                    showSettingsDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("ℹ️ 关于 DreamTales") },
+                                onClick = {
+                                    showTopMenu = false
+                                    showAboutDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
                         }
                     }
                 }

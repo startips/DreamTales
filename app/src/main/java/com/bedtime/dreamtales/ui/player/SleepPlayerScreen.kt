@@ -68,6 +68,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,6 +89,7 @@ import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.constants.AppConstants
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
+import com.bedtime.dreamtales.service.AmbientSound
 import com.bedtime.dreamtales.service.FlipSensorManager
 import kotlin.math.max
 
@@ -108,6 +110,7 @@ fun SleepPlayerScreen(
     val isFaceDown by flipSensorManager.isFaceDown.collectAsState()
 
     var activeTab by remember { mutableIntStateOf(0) } // 0: ⏱️ 睡眠表盘, 1: 📖 绘本跟读歌词
+    var showAmbientSheet by remember { mutableStateOf(false) }
 
     // 监听翻转扣屏感应：仅当正面朝下扣屏时熄屏；手持时恢复系统自然亮度
     LaunchedEffect(isFaceDown) {
@@ -199,7 +202,7 @@ fun SleepPlayerScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (playbackState.isPlaying) "正在安抚伴读 · 双指轻点屏幕任意处暂停" else "伴读待命中 · 轻触下方按钮开启",
+                        text = if (playbackState.isPlaying) "🌙 正在安抚伴读" else "伴读就绪 · 待命中",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -286,35 +289,67 @@ fun SleepPlayerScreen(
                     }
                 }
 
-                // 下部：声学衰减状态、进度条与清晰大按钮
+                // 下部：系统音量、助眠白噪音、进度条与播控大按钮
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // 渐衰与减速实时声学状态显示（Tonal Surface）
-                    Card(
-                        shape = CircleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    // 真实系统硬件音量 与 助眠白噪音背景音控制
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // 真实系统音量胶囊
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                         ) {
-                            Text(
-                                text = "当前音量: ${(playbackState.currentVolume * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = "伴读语速: ${String.format("%.2f", playbackState.currentSpeed)}x",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val volPercent = (playbackState.currentVolume * 100).toInt()
+                                Text(
+                                    text = if (volPercent > 0) "🔊 音量: $volPercent%" else "🔇 静音",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // 助眠背景白噪音混音胶囊
+                        Surface(
+                            shape = CircleShape,
+                            color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(
+                                1.dp,
+                                if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.clickable { showAmbientSheet = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (playbackState.ambientSound != AmbientSound.OFF) "${playbackState.ambientSound.iconEmoji} ${playbackState.ambientSound.title}"
+                                    else "🌿 助眠背景音",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (playbackState.ambientSound != AmbientSound.OFF) FontWeight.Bold else FontWeight.Normal
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "▾",
+                                    fontSize = 10.sp,
+                                    color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
@@ -455,21 +490,21 @@ fun SleepPlayerScreen(
                             )
                         }
                     }
-                }
 
-                // 底部防误触提示
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(bottom = 14.dp)
-                ) {
-                    Text(
-                        text = "🌙 扣屏体验：将手机正面朝下平放在床头柜上，屏幕将彻底熄灭防误触；拿起即自动恢复",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
             }
+        }
+
+        // 助眠白噪音混音弹窗
+        if (showAmbientSheet) {
+            AmbientSoundDialog(
+                currentSound = playbackState.ambientSound,
+                currentVolume = playbackState.ambientVolume,
+                onSoundSelected = { sound -> viewModel.setAmbientSound(sound) },
+                onVolumeChanged = { vol -> viewModel.setAmbientVolume(vol) },
+                onDismiss = { showAmbientSheet = false }
+            )
         }
 
         // 翻转扣屏感应触发时的全屏透明拦截防误触遮罩

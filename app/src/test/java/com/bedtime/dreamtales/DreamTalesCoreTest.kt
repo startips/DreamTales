@@ -3,6 +3,7 @@ package com.bedtime.dreamtales
 import com.bedtime.dreamtales.core.constants.AppConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -210,11 +211,15 @@ class DreamTalesCoreTest {
         var mode = com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL
         fun nextMode(current: com.bedtime.dreamtales.service.PlaybackMode): com.bedtime.dreamtales.service.PlaybackMode {
             return when (current) {
-                com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL -> com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE
+                com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL -> com.bedtime.dreamtales.service.PlaybackMode.SHUFFLE
+                com.bedtime.dreamtales.service.PlaybackMode.SHUFFLE -> com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE
                 com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE -> com.bedtime.dreamtales.service.PlaybackMode.STOP_AFTER_CURRENT
                 com.bedtime.dreamtales.service.PlaybackMode.STOP_AFTER_CURRENT -> com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL
             }
         }
+
+        mode = nextMode(mode)
+        assertEquals(com.bedtime.dreamtales.service.PlaybackMode.SHUFFLE, mode)
 
         mode = nextMode(mode)
         assertEquals(com.bedtime.dreamtales.service.PlaybackMode.REPEAT_ONE, mode)
@@ -224,6 +229,31 @@ class DreamTalesCoreTest {
 
         mode = nextMode(mode)
         assertEquals(com.bedtime.dreamtales.service.PlaybackMode.SEQUENTIAL, mode)
+    }
+
+    @Test
+    fun testAmbientSoundEnumAndAssetsMapping() {
+        val sounds = com.bedtime.dreamtales.service.AmbientSound.values()
+        assertEquals(6, sounds.size)
+        assertEquals(com.bedtime.dreamtales.service.AmbientSound.OFF, sounds[0])
+        assertNull(sounds[0].assetName)
+
+        val rain = com.bedtime.dreamtales.service.AmbientSound.RAIN
+        assertEquals("🌧️", rain.iconEmoji)
+        assertEquals("ambient/ambient_rain.wav", rain.assetName)
+
+        val waves = com.bedtime.dreamtales.service.AmbientSound.WAVES
+        assertEquals("🌊", waves.iconEmoji)
+        assertEquals("ambient/ambient_waves.wav", waves.assetName)
+    }
+
+    @Test
+    fun testEffectiveSystemVolumeCalculation() {
+        val systemVolumeRatio = 0.6f // 手机当前硬件音量为 60%
+        val fadeMultiplier = 0.5f     // 处于最后5分钟声学衰减中 (50%)
+        val effectiveVolume = systemVolumeRatio * fadeMultiplier
+        assertEquals(0.3f, effectiveVolume, 0.001f)
+        assertEquals(30, (effectiveVolume * 100).toInt())
     }
 
     @Test
