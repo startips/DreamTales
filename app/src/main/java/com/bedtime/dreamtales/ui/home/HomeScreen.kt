@@ -90,6 +90,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -221,7 +222,7 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var localSearchQuery by remember { mutableStateOf("") }
     var selectedStoryToRead by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.Story?>(null) }
-    var showAllStories by remember { mutableStateOf(false) }
+    var visibleStoryCount by remember { mutableIntStateOf(5) }
     var voiceToDelete by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.VoiceProfile?>(null) }
     var recommendedStories by remember {
         mutableStateOf(com.bedtime.dreamtales.core.StorySpeechHelper.getRandomRecommendations(5))
@@ -265,12 +266,12 @@ fun HomeScreen(
         }
     }
 
-    // 决定实际展示的故事列表（未输入搜索词时默认收拢展示前 5 篇；搜索时展示全部匹配项）
-    val displayStories = remember(localFilteredStories, showAllStories, localSearchQuery) {
-        if (localSearchQuery.isNotBlank() || showAllStories) {
+    // 决定实际展示的故事列表（未输入搜索词时根据当前加载深度分页展示，初始5篇，每次点“浏览更多”增加4篇；搜索时展示全部匹配项）
+    val displayStories = remember(localFilteredStories, visibleStoryCount, localSearchQuery) {
+        if (localSearchQuery.isNotBlank()) {
             localFilteredStories
         } else {
-            localFilteredStories.take(5)
+            localFilteredStories.take(visibleStoryCount)
         }
     }
 
@@ -899,11 +900,18 @@ fun HomeScreen(
                 }
             }
 
-            // 4. “浏览更多经典童话”折叠展开按键（总数超过5篇且未处于本地搜索时显示）
+            // 4. “浏览更多经典童话”按键（总数超过5篇且未处于本地搜索时显示）
             if (localSearchQuery.isBlank() && filteredAndSortedStories.size > 5) {
+                val isFullyLoaded = visibleStoryCount >= filteredAndSortedStories.size
                 item(key = "toggle_more_stories_button") {
                     OutlinedButton(
-                        onClick = { showAllStories = !showAllStories },
+                        onClick = {
+                            if (isFullyLoaded) {
+                                visibleStoryCount = 5
+                            } else {
+                                visibleStoryCount += 4
+                            }
+                        },
                         shape = CircleShape,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -913,8 +921,15 @@ fun HomeScreen(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                         )
                     ) {
+                        val remainingCount = filteredAndSortedStories.size - visibleStoryCount
+                        val buttonText = if (isFullyLoaded) {
+                            "已展开全部 (共 ${filteredAndSortedStories.size} 篇) · 点击收起 ▴"
+                        } else {
+                            val nextBatch = minOf(4, remainingCount)
+                            "浏览更多童话 (+$nextBatch 篇 · 剩余 $remainingCount 篇) ▾"
+                        }
                         Text(
-                            text = if (showAllStories) "收起其余童话 ▴" else "浏览更多经典童话 (共 ${filteredAndSortedStories.size} 篇) ▾",
+                            text = buttonText,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
