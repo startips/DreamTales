@@ -1,0 +1,8 @@
+## DreamTales 本地开发与 API 密钥配置模板
+## 复制此文件为 local.properties，填入您的真实 API Key 即可本地调试
+sdk.dir=/path/to/Android/sdk
+
+DEFAULT_MIMO_API_KEY=your_mimo_api_key_here
+DEFAULT_CPA_BASE_URL=https://your-cpa-api.example.com/v1/
+DEFAULT_CPA_API_KEY=your_cpa_api_key_here
+DEFAULT_CPA_MODEL=gemini-3.5-flash-lite

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.bedtime.dreamtales.BuildConfig
 
 class AppConfig(context: Context) {
 
@@ -155,15 +156,15 @@ class AppConfig(context: Context) {
         private const val KEY_BAILIAN_API_KEY = "key_bailian_api_key"
         private const val KEY_GEMINI_API_KEY = "key_gemini_api_key"
         private const val KEY_DEFAULT_VOICE = "key_default_voice"
-        private const val DEFAULT_MIMO_API_KEY = "YOUR_MIMO_KEY"
+        private val DEFAULT_MIMO_API_KEY = BuildConfig.DEFAULT_MIMO_API_KEY
 
         private const val KEY_CPA_BASE_URL = "key_cpa_base_url"
         private const val KEY_CPA_API_KEY = "key_cpa_api_key"
         private const val KEY_CPA_MODEL = "key_cpa_model"
 
-        const val DEFAULT_CPA_BASE_URL = "https://api.openai.com/v1/"
-        const val DEFAULT_CPA_API_KEY = "YOUR_CPA_KEY"
-        const val DEFAULT_CPA_MODEL = "gemini-3.5-flash-lite"
+        val DEFAULT_CPA_BASE_URL = BuildConfig.DEFAULT_CPA_BASE_URL
+        val DEFAULT_CPA_API_KEY = BuildConfig.DEFAULT_CPA_API_KEY
+        val DEFAULT_CPA_MODEL = BuildConfig.DEFAULT_CPA_MODEL
 
         @Volatile
         private var instance: AppConfig? = null

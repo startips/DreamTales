@@ -1,8 +1,24 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+}
+
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        FileInputStream(localFile).use { load(it) }
+    }
+}
+
+fun getPropOrEnv(key: String, defaultVal: String = ""): String {
+    return localProperties.getProperty(key)
+        ?: System.getenv(key)
+        ?: defaultVal
 }
 
 android {
@@ -13,13 +29,18 @@ android {
         applicationId = "com.bedtime.dreamtales"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "DEFAULT_MIMO_API_KEY", "\"${getPropOrEnv("DEFAULT_MIMO_API_KEY")}\"")
+        buildConfigField("String", "DEFAULT_CPA_BASE_URL", "\"${getPropOrEnv("DEFAULT_CPA_BASE_URL", "https://api.openai.com/v1/")}\"")
+        buildConfigField("String", "DEFAULT_CPA_API_KEY", "\"${getPropOrEnv("DEFAULT_CPA_API_KEY")}\"")
+        buildConfigField("String", "DEFAULT_CPA_MODEL", "\"${getPropOrEnv("DEFAULT_CPA_MODEL", "gemini-3.5-flash-lite")}\"")
     }
 
     buildTypes {
@@ -52,6 +73,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
