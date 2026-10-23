@@ -739,4 +739,20 @@ class DreamTalesCoreTest {
         assertEquals("📱", getThemeIcon("system"))
         assertEquals("🌙", getThemeIcon("unknown"))
     }
+
+    @Test
+    fun testThemeModeSequentialCycling() {
+        fun getNextThemeMode(currentMode: String): Pair<String, String> {
+            return when (currentMode) {
+                "night" -> "day" to "☀️ 绘本米黄"
+                "day" -> "system" to "📱 跟随系统"
+                else -> "night" to "🌙 深度暖夜"
+            }
+        }
+
+        assertEquals("day" to "☀️ 绘本米黄", getNextThemeMode("night"))
+        assertEquals("system" to "📱 跟随系统", getNextThemeMode("day"))
+        assertEquals("night" to "🌙 深度暖夜", getNextThemeMode("system"))
+        assertEquals("night" to "🌙 深度暖夜", getNextThemeMode("other"))
+    }
 }

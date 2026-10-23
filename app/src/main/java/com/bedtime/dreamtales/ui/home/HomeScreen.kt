@@ -159,7 +159,6 @@ fun HomeScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showAddStoryDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
-    var showThemeMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var localSearchQuery by remember { mutableStateOf("") }
@@ -247,86 +246,34 @@ fun HomeScreen(
 
                     // 右上角操作区：外观切换小图标 + 常规更多菜单（并列）
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 1. 外观切换小图标按钮（点击随时切换日间绘本/夜间伴读/跟随系统）
-                        Box {
-                            IconButton(onClick = { showThemeMenu = true }) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.size(34.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                        Text(
-                                            text = when (themeMode) {
-                                                "day" -> "☀️"
-                                                "system" -> "📱"
-                                                else -> "🌙"
-                                            },
-                                            fontSize = 15.sp
-                                        )
-                                    }
+                        // 1. 外观切换小图标按钮（点击直接顺序轮换：🌙 深度暖夜 -> ☀️ 绘本米黄 -> 📱 跟随系统）
+                        IconButton(
+                            onClick = {
+                                val (nextMode, modeName) = when (themeMode) {
+                                    "night" -> "day" to "☀️ 绘本米黄"
+                                    "day" -> "system" to "📱 跟随系统"
+                                    else -> "night" to "🌙 深度暖夜"
                                 }
+                                viewModel.setThemeMode(nextMode)
+                                Toast.makeText(context, "已切换至 $modeName", Toast.LENGTH_SHORT).show()
                             }
-
-                            DropdownMenu(
-                                expanded = showThemeMenu,
-                                onDismissRequest = { showThemeMenu = false }
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.size(34.dp)
                             ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "🌙 深度暖夜",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (themeMode == "night") FontWeight.Bold else FontWeight.Normal,
-                                            color = if (themeMode == "night") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setThemeMode("night")
-                                        showThemeMenu = false
-                                        Toast.makeText(context, "已切换至 🌙 深度暖夜模式", Toast.LENGTH_SHORT).show()
-                                    },
-                                    trailingIcon = if (themeMode == "night") {
-                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
-                                    } else null
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "☀️ 绘本米黄",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (themeMode == "day") FontWeight.Bold else FontWeight.Normal,
-                                            color = if (themeMode == "day") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setThemeMode("day")
-                                        showThemeMenu = false
-                                        Toast.makeText(context, "已切换至 ☀️ 绘本米黄模式", Toast.LENGTH_SHORT).show()
-                                    },
-                                    trailingIcon = if (themeMode == "day") {
-                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
-                                    } else null
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = "📱 跟随系统",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (themeMode == "system") FontWeight.Bold else FontWeight.Normal,
-                                            color = if (themeMode == "system") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.setThemeMode("system")
-                                        showThemeMenu = false
-                                        Toast.makeText(context, "已切换至 📱 跟随系统模式", Toast.LENGTH_SHORT).show()
-                                    },
-                                    trailingIcon = if (themeMode == "system") {
-                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
-                                    } else null
-                                )
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Text(
+                                        text = when (themeMode) {
+                                            "day" -> "☀️"
+                                            "system" -> "📱"
+                                            else -> "🌙"
+                                        },
+                                        fontSize = 15.sp
+                                    )
+                                }
                             }
                         }
 
