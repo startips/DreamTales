@@ -922,12 +922,8 @@ fun HomeScreen(
     // 设置主弹窗
     if (showSettingsDialog) {
         SettingsDialog(
-            currentThemeMode = themeMode,
             cacheSizeMb = cacheSizeMb,
             cacheCount = cacheCount,
-            onThemeModeSelected = { mode ->
-                viewModel.setThemeMode(mode)
-            },
             onOpenExport = {
                 showSettingsDialog = false
                 showExportDialog = true

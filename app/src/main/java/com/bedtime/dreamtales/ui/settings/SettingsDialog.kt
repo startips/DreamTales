@@ -49,8 +49,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,10 +75,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun SettingsDialog(
-    currentThemeMode: String,
     cacheSizeMb: Float,
     cacheCount: Int,
-    onThemeModeSelected: (String) -> Unit,
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
     onClearCacheClick: () -> Unit,
@@ -109,50 +105,7 @@ fun SettingsDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. 界面色调与护眼
-                SettingSectionCard(title = "🎨 外观与护眼模式") {
-                    val themeOptions = listOf(
-                        Triple("night", "🌙 深度暖夜", "专为暗光卧室设计，杜绝强白光"),
-                        Triple("day", "☀️ 绘本米黄", "羊皮纸温润米黄，日间阅读柔和"),
-                        Triple("system", "📱 跟随系统", "随系统当前深浅色模式自动切换")
-                    )
-                    themeOptions.forEach { (mode, name, desc) ->
-                        val isSelected = currentThemeMode == mode
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.small)
-                                .clickable { onThemeModeSelected(mode) }
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { onThemeModeSelected(mode) },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = name,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                                Text(
-                                    text = desc,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 2. 数据备份与书单导入导出
+                // 1. 数据备份与书单导入导出
                 SettingSectionCard(title = "📚 故事书单数据管理") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -188,7 +141,7 @@ fun SettingsDialog(
                     }
                 }
 
-                // 4. 离线缓存管理
+                // 2. 离线缓存管理
                 SettingSectionCard(title = "📦 本地离线音频缓存") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
