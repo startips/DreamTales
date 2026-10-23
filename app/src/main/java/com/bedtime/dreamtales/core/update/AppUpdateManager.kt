@@ -143,15 +143,22 @@ class AppUpdateManager(private val context: Context) {
         val updatesDir = File(context.externalCacheDir ?: context.cacheDir, "updates")
         if (!updatesDir.exists()) updatesDir.mkdirs()
 
-        val targetFile = File(updatesDir, apkFileName)
-        // 检查本地是否已存在完整且结构有效的 APK，若已完整下载则直接就绪，避免重复消耗流量
+        // 防御路径穿越：严格只取文件名部分并限制在 updates 目录下
+        val safeFileName = File(apkFileName).name.ifBlank { "DreamTales_update.apk" }
+        val targetFile = File(updatesDir, safeFileName)
+        if (!targetFile.canonicalPath.startsWith(updatesDir.canonicalPath)) {
+            emit(DownloadState.Error("非法的文件存储路径"))
+            return@flow
+        }
+
+        // 检查本地是否已存在完整且结构有效的 APK，若已完整下载且包名一致则直接就绪，避免重复消耗流量
         if (targetFile.exists() && targetFile.length() > 0) {
             val pkgInfo = try {
                 context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
             } catch (e: Exception) {
                 null
             }
-            if (pkgInfo != null) {
+            if (pkgInfo != null && pkgInfo.packageName == context.packageName) {
                 emit(DownloadState.Downloading(100, targetFile.length(), targetFile.length()))
                 emit(DownloadState.Success(targetFile))
                 return@flow
@@ -228,6 +235,17 @@ class AppUpdateManager(private val context: Context) {
      */
     fun installApk(apkFile: File) {
         if (!apkFile.exists() || apkFile.length() == 0L) return
+
+        // 安全校验：校验 APK 是否完整且包名是否严格匹配当前应用
+        val pkgInfo = try {
+            context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+        } catch (e: Exception) {
+            null
+        }
+        if (pkgInfo == null || pkgInfo.packageName != context.packageName) {
+            apkFile.delete()
+            return
+        }
 
         // Android 8.0+ 权限判断
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

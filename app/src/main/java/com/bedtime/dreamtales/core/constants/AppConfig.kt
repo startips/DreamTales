@@ -46,11 +46,12 @@ class AppConfig(context: Context) {
     }
 
     /**
-     * 读取 CPA 故事创作与检索配置
+     * 读取 CPA 故事创作与检索配置（强制使用 HTTPS 安全传输协议）
      */
     fun getCpaBaseUrl(): String {
-        return prefs.getString(KEY_CPA_BASE_URL, DEFAULT_CPA_BASE_URL)?.trim()
+        val raw = prefs.getString(KEY_CPA_BASE_URL, DEFAULT_CPA_BASE_URL)?.trim()
             ?.ifEmpty { DEFAULT_CPA_BASE_URL } ?: DEFAULT_CPA_BASE_URL
+        return ensureHttpsUrl(raw)
     }
 
     fun getCpaApiKey(): String {
@@ -64,11 +65,22 @@ class AppConfig(context: Context) {
     }
 
     fun setCpaConfig(baseUrl: String, apiKey: String, model: String) {
+        val safeUrl = ensureHttpsUrl(baseUrl.trim())
         prefs.edit()
-            .putString(KEY_CPA_BASE_URL, baseUrl.trim())
+            .putString(KEY_CPA_BASE_URL, safeUrl)
             .putString(KEY_CPA_API_KEY, apiKey.trim())
             .putString(KEY_CPA_MODEL, model.trim())
             .apply()
+    }
+
+    private fun ensureHttpsUrl(url: String): String {
+        val trimmed = url.trim()
+        return when {
+            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+            trimmed.startsWith("http://", ignoreCase = true) -> "https://" + trimmed.substring(7)
+            trimmed.isNotBlank() -> "https://$trimmed"
+            else -> DEFAULT_CPA_BASE_URL
+        }
     }
 
     /**

@@ -3,8 +3,8 @@ package com.bedtime.dreamtales.data.api
 import com.google.gson.annotations.SerializedName
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.Header
 import retrofit2.http.POST
-import retrofit2.http.Query
 
 data class GeminiGenerateRequest(
     @SerializedName("contents") val contents: List<GeminiContent>,
@@ -63,13 +63,13 @@ interface GoogleGeminiService {
 
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateStory(
-        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GeminiGenerateRequest
     ): Response<GeminiGenerateResponse>
 
     @POST("v1beta/models/gemini-2.5-flash-preview-tts:generateContent")
     suspend fun generateAudio(
-        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") apiKey: String,
         @Body request: GeminiGenerateRequest
     ): Response<GeminiGenerateResponse>
 }

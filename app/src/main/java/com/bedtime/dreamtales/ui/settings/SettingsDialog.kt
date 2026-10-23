@@ -620,7 +620,7 @@ fun AboutDialog(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "🔒 隐私守护：所有音频均保存在手机本地沙盒中，离线可用，绝不上云存储。",
+                    text = "🔒 隐私守护：故事与伴读音频持久化于手机私有沙盒；家长录音样本经 HTTPS 加密传输用于即时声音复刻，不作非授权留存。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
