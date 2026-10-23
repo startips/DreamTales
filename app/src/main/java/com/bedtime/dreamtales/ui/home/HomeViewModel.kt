@@ -416,4 +416,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun hasMimoApiKey(): Boolean = appConfig.hasMimoApiKey()
+
+    fun getGithubRepo(): String = appConfig.getGithubRepo()
+    fun setGithubRepo(repo: String) = appConfig.setGithubRepo(repo)
 }

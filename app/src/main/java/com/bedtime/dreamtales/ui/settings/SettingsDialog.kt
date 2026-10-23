@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.service.PlaybackMode
@@ -80,6 +81,7 @@ fun SettingsDialog(
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
     onClearCacheClick: () -> Unit,
+    onCheckUpdateClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -176,6 +178,42 @@ fun SettingsDialog(
                             Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("清理", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                // 3. 应用版本与检查更新
+                SettingSectionCard(title = "🔄 应用更新") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "当前版本：v${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "支持 GitHub Releases 动态一键升级",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = onCheckUpdateClick,
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("检查更新", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -536,7 +574,7 @@ fun AboutDialog(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "版本 v1.6.0 · 睡前声学特别版",
+                        text = "版本 v${BuildConfig.VERSION_NAME} · 睡前伴读特别版",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

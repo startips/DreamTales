@@ -799,4 +799,16 @@ class DreamTalesCoreTest {
         onSeekTo(45_000L)
         assertEquals("暂停状态拖动应即时更新进度", 45_000L, playbackState.currentPositionMs)
     }
+
+    @Test
+    fun testSemanticVersionComparison() {
+        val isNewer = com.bedtime.dreamtales.core.update.AppUpdateManager.Companion::isRemoteNewer
+
+        assertTrue("2.1.0 比 2.0.0 新", isNewer("2.1.0", "2.0.0"))
+        assertTrue("2.0.1 比 2.0.0 新", isNewer("2.0.1", "2.0.0"))
+        assertTrue("3.0.0 比 2.0.0 新", isNewer("v3.0.0", "2.0.0"))
+        assertFalse("2.0.0 与 2.0.0 相同", isNewer("2.0.0", "2.0.0"))
+        assertFalse("1.9.9 比 2.0.0 旧", isNewer("1.9.9", "2.0.0"))
+        assertFalse("1.0.0 比 2.0.0 旧", isNewer("1.0.0", "2.0.0"))
+    }
 }

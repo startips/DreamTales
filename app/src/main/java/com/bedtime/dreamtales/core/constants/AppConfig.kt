@@ -148,10 +148,21 @@ class AppConfig(context: Context) {
         prefs.edit().putString(KEY_PLAYBACK_MODE, mode).apply()
     }
 
+    fun getGithubRepo(): String {
+        return prefs.getString(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)?.trim()
+            ?.ifEmpty { DEFAULT_GITHUB_REPO } ?: DEFAULT_GITHUB_REPO
+    }
+
+    fun setGithubRepo(repo: String) {
+        prefs.edit().putString(KEY_GITHUB_REPO, repo.trim()).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "dreamtales_secure_prefs"
         private const val KEY_THEME_MODE = "key_theme_mode"
         private const val KEY_PLAYBACK_MODE = "key_playback_mode"
+        private const val KEY_GITHUB_REPO = "key_github_repo"
+        const val DEFAULT_GITHUB_REPO = "shadowx/DreamTales"
         private const val KEY_MIMO_API_KEY = "key_mimo_api_key"
         private const val KEY_BAILIAN_API_KEY = "key_bailian_api_key"
         private const val KEY_GEMINI_API_KEY = "key_gemini_api_key"

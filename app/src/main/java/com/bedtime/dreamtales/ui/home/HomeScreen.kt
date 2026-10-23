@@ -113,10 +113,17 @@ import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackState
+import com.bedtime.dreamtales.BuildConfig
+import com.bedtime.dreamtales.core.update.AppReleaseInfo
+import com.bedtime.dreamtales.core.update.AppUpdateManager
+import com.bedtime.dreamtales.core.update.DownloadState
+import com.bedtime.dreamtales.core.update.UpdateCheckResult
 import com.bedtime.dreamtales.ui.settings.AboutDialog
 import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.SettingsDialog
+import com.bedtime.dreamtales.ui.update.DownloadProgressDialog
+import com.bedtime.dreamtales.ui.update.NewVersionDialog
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -160,6 +167,12 @@ fun HomeScreen(
     var showAddStoryDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    val updateManager = remember { AppUpdateManager(context) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var newReleaseInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
+    var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var localSearchQuery by remember { mutableStateOf("") }
     var selectedStoryToRead by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.Story?>(null) }
@@ -882,7 +895,79 @@ fun HomeScreen(
             onClearCacheClick = {
                 showClearCacheConfirm = true
             },
+            onCheckUpdateClick = {
+                if (isCheckingUpdate) return@SettingsDialog
+                isCheckingUpdate = true
+                Toast.makeText(context, "正在检测 GitHub 最新版本...", Toast.LENGTH_SHORT).show()
+                coroutineScope.launch {
+                    val repo = viewModel.getGithubRepo()
+                    updateManager.checkForUpdate(repo).collect { result ->
+                        isCheckingUpdate = false
+                        when (result) {
+                            is UpdateCheckResult.HasUpdate -> {
+                                newReleaseInfo = result.releaseInfo
+                            }
+                            is UpdateCheckResult.UpToDate -> {
+                                Toast.makeText(context, "🎉 当前已是最新版本 (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                            }
+                            is UpdateCheckResult.Error -> {
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            },
             onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    // 发现新版本弹窗
+    newReleaseInfo?.let { release ->
+        NewVersionDialog(
+            releaseInfo = release,
+            onStartDownload = {
+                val apkName = if (release.apkName.isNotBlank()) release.apkName else "DreamTales_${release.versionName}.apk"
+                newReleaseInfo = null
+                showDownloadDialog = true
+                downloadState = DownloadState.Idle
+                coroutineScope.launch {
+                    updateManager.downloadApk(release.downloadUrl, apkName).collect { state ->
+                        downloadState = state
+                        if (state is DownloadState.Success) {
+                            showDownloadDialog = false
+                            updateManager.installApk(state.apkFile)
+                        }
+                    }
+                }
+            },
+            onDismiss = { newReleaseInfo = null }
+        )
+    }
+
+    // 下载中进度弹窗
+    if (showDownloadDialog) {
+        DownloadProgressDialog(
+            downloadState = downloadState,
+            onCancel = {
+                showDownloadDialog = false
+                downloadState = DownloadState.Idle
+            },
+            onRetry = {
+                // 重新尝试下载
+                val currentRelease = newReleaseInfo
+                if (currentRelease != null) {
+                    val apkName = if (currentRelease.apkName.isNotBlank()) currentRelease.apkName else "DreamTales_${currentRelease.versionName}.apk"
+                    coroutineScope.launch {
+                        updateManager.downloadApk(currentRelease.downloadUrl, apkName).collect { state ->
+                            downloadState = state
+                            if (state is DownloadState.Success) {
+                                showDownloadDialog = false
+                                updateManager.installApk(state.apkFile)
+                            }
+                        }
+                    }
+                }
+            }
         )
     }
 
