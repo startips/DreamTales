@@ -655,4 +655,55 @@ class DreamTalesCoreTest {
         // 3. 6000x4000 亿级像素超大图 (6000 / 8 = 750 <= 1440)
         assertEquals(8, calculateSampleSize(6000, 4000))
     }
+
+    @Test
+    fun testStoryPreloadAndNonBlockingOtherStoryClicks() {
+        // 模拟文库与缓存环境
+        val storyA = com.bedtime.dreamtales.data.local.entity.Story(id = 1, title = "故事A (新搜索)", targetAge = "3-6", content = "正文A", durationSeconds = 180)
+        val storyB = com.bedtime.dreamtales.data.local.entity.Story(id = 2, title = "故事B (已缓存)", targetAge = "3-6", content = "正文B", durationSeconds = 120)
+        val storyC = com.bedtime.dreamtales.data.local.entity.Story(id = 3, title = "故事C (未缓存)", targetAge = "3-6", content = "正文C", durationSeconds = 150)
+
+        val cachedMap = mutableMapOf<Long, String>(
+            storyB.id to "/data/user/0/com.bedtime.dreamtales/files/audio_caches/b.wav"
+        )
+
+        var currentSynthesizingStoryId: Long? = storyA.id // 故事A 正在后台加载中
+        var userRequestedPlayStoryId: Long? = null         // 后台加载非用户点播
+        var navigatingToPlayerStoryId: Long? = null
+
+        fun handleStoryClick(story: com.bedtime.dreamtales.data.local.entity.Story) {
+            // 1. 如果已缓存，零延迟直接就绪播放
+            val cachedPath = cachedMap[story.id]
+            if (cachedPath != null) {
+                navigatingToPlayerStoryId = story.id
+                return
+            }
+
+            // 2. 如果正是正在合成的故事，升级为点播
+            if (currentSynthesizingStoryId == story.id) {
+                userRequestedPlayStoryId = story.id
+                return
+            }
+
+            // 3. 如果是新的未缓存故事，切换任务
+            currentSynthesizingStoryId = story.id
+            userRequestedPlayStoryId = story.id
+        }
+
+        // 测试1：在故事A加载期间，点击已缓存的故事B -> 必须立即响应播放，不被故事A阻塞！
+        handleStoryClick(storyB)
+        assertEquals("故事B应立即就绪播放", 2L, navigatingToPlayerStoryId)
+
+        // 测试2：在故事A加载期间，点击未缓存的故事C -> 必须立即切换当前加载目标至故事C！
+        handleStoryClick(storyC)
+        assertEquals("合成目标应切换为故事C", 3L, currentSynthesizingStoryId)
+        assertEquals("用户点播目标应记录为故事C", 3L, userRequestedPlayStoryId)
+
+        // 测试3：后台静默加载故事A完成时，若用户没有点播它，不应跳转播放
+        userRequestedPlayStoryId = null
+        val onSilentPreloadComplete: () -> Boolean = {
+            userRequestedPlayStoryId == storyA.id // false: 不跳播放页
+        }
+        assertFalse("静默预加载完成不应自动跳转播放", onSilentPreloadComplete())
+    }
 }

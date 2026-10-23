@@ -13,6 +13,9 @@ import com.bedtime.dreamtales.data.repository.VoiceRepository
 import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackService
 import com.bedtime.dreamtales.service.StoryPlaybackState
+import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -189,16 +192,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var activeSynthesisJob: Job? = null
+    private var userRequestedPlayStoryId: Long? = null
+
     fun onStoryClicked(story: Story, onNavigateToPlayer: () -> Unit) {
         val currentPlayback = StoryPlaybackService.playbackState.value
         // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器
         if (currentPlayback.storyId == story.id && currentPlayback.storyTitle.isNotBlank()) {
             onNavigateToPlayer()
-            return
-        }
-
-        // 防抖保护：若当前已有故事在合成中，避免快速重复并发
-        if (_synthesisState.value is SynthesisUiState.Synthesizing) {
             return
         }
 
@@ -208,7 +209,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        viewModelScope.launch {
+        // 1. 优先检查本地是否已有完整音频缓存：已有缓存零等待直接就绪播放，绝不受任何后台加载任务干扰
+        val cached = completedCaches.value.find { it.storyId == story.id && it.voiceProfileId == currentVoice.id }
+        if (cached != null) {
+            val file = File(cached.localFilePath)
+            if (file.exists() && file.length() > 0) {
+                viewModelScope.launch {
+                    storyRepository.recordStoryPlayed(story.id)
+                }
+                _synthesisState.value = SynthesisUiState.ReadyToPlay(story, file.absolutePath)
+                return
+            }
+        }
+
+        // 2. 如果用户点击的正是当前正在合成中的故事，标记为用户主动要听，合成完自动进入播放
+        val currentSynth = _synthesisState.value
+        if (currentSynth is SynthesisUiState.Synthesizing && currentSynth.storyId == story.id) {
+            userRequestedPlayStoryId = story.id
+            return
+        }
+
+        // 3. 用户点击了一个新的未缓存故事：取消旧任务，全力响应当前用户最新点播的故事！
+        activeSynthesisJob?.cancel()
+        userRequestedPlayStoryId = story.id
+
+        activeSynthesisJob = viewModelScope.launch {
             _synthesisState.value = SynthesisUiState.Synthesizing(story.id, story.title, 0)
             try {
                 val filePath = storyRepository.getOrSynthesizeStoryAudio(
@@ -218,13 +243,69 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _synthesisState.value = SynthesisUiState.Synthesizing(story.id, story.title, progress)
                     }
                 )
-                // 记录播放频次
                 storyRepository.recordStoryPlayed(story.id)
-                _synthesisState.value = SynthesisUiState.ReadyToPlay(story, filePath)
+                // 仅当用户依然想听这个故事时才发出 ReadyToPlay
+                if (userRequestedPlayStoryId == story.id) {
+                    _synthesisState.value = SynthesisUiState.ReadyToPlay(story, filePath)
+                }
+            } catch (e: CancellationException) {
+                // 任务被用户切换取消，安全退出
+                throw e
             } catch (e: IllegalStateException) {
                 _synthesisState.value = SynthesisUiState.Error(e.message ?: "未配置 API Key")
             } catch (e: Exception) {
                 _synthesisState.value = SynthesisUiState.Error(getFriendlyErrorMessage(e, "合成失败"))
+            }
+        }
+    }
+
+    /**
+     * 搜索/录入新故事后后台静默预加载伴读音频：
+     * 仅在卡片原位展示加载进度，完成后静默就绪，不自动弹窗，不立马播放。
+     */
+    fun preloadStoryAudio(story: Story) {
+        val currentVoice = defaultVoice.value ?: return
+
+        // 检查是否已有缓存
+        val cached = completedCaches.value.find { it.storyId == story.id && it.voiceProfileId == currentVoice.id }
+        if (cached != null && File(cached.localFilePath).exists() && File(cached.localFilePath).length() > 0) {
+            return
+        }
+
+        // 如果用户前台正主动要求播放某个故事，不打断前台点播
+        if (_synthesisState.value is SynthesisUiState.Synthesizing && userRequestedPlayStoryId != null) {
+            return
+        }
+
+        activeSynthesisJob?.cancel()
+        userRequestedPlayStoryId = null // 标记为后台静默加载
+
+        activeSynthesisJob = viewModelScope.launch {
+            _synthesisState.value = SynthesisUiState.Synthesizing(story.id, story.title, 0)
+            try {
+                storyRepository.getOrSynthesizeStoryAudio(
+                    story = story,
+                    voiceProfile = currentVoice,
+                    onProgress = { progress ->
+                        _synthesisState.value = SynthesisUiState.Synthesizing(story.id, story.title, progress)
+                    }
+                )
+                // 静默加载完成：因为 userRequestedPlayStoryId == null，绝不触发 ReadyToPlay 弹播放器！
+                // 恢复 Idle 状态即可，卡片上会自动因为 completedCaches 的更新显示为“已就绪”
+                if (userRequestedPlayStoryId == story.id) {
+                    val finalCache = completedCaches.value.find { it.storyId == story.id && it.voiceProfileId == currentVoice.id }
+                    if (finalCache != null) {
+                        _synthesisState.value = SynthesisUiState.ReadyToPlay(story, finalCache.localFilePath)
+                    } else {
+                        _synthesisState.value = SynthesisUiState.Idle
+                    }
+                } else {
+                    _synthesisState.value = SynthesisUiState.Idle
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _synthesisState.value = SynthesisUiState.Idle
             }
         }
     }

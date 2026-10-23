@@ -181,14 +181,14 @@ fun HomeScreen(
         }
     }
 
-    // AI 生成故事成功后进入待命播放
+    // AI 生成故事成功后，在文库中后台静默加载准备音频，不强制跳转播放页面
     LaunchedEffect(generationState) {
         if (generationState is StoryGenerationUiState.Success) {
             val story = (generationState as StoryGenerationUiState.Success).story
             viewModel.resetGenerationState()
             searchQuery = ""
-            Toast.makeText(context, "已成功添加《${story.title}》至文库！", Toast.LENGTH_SHORT).show()
-            viewModel.onStoryClicked(story, onNavigateToPlayer)
+            Toast.makeText(context, "已收录《${story.title}》至文库，正在准备伴读音频...", Toast.LENGTH_SHORT).show()
+            viewModel.preloadStoryAudio(story)
         }
     }
 
@@ -968,8 +968,8 @@ fun HomeScreen(
             onStoryAdded = { title, content, targetAge, iconEmoji ->
                 showAddStoryDialog = false
                 viewModel.addCustomStory(title, content, targetAge, iconEmoji) { newStory ->
-                    Toast.makeText(context, "已成功收录《${newStory.title}》！", Toast.LENGTH_SHORT).show()
-                    viewModel.onStoryClicked(newStory, onNavigateToPlayer)
+                    Toast.makeText(context, "已成功收录《${newStory.title}》，正在准备伴读音频...", Toast.LENGTH_SHORT).show()
+                    viewModel.preloadStoryAudio(newStory)
                 }
             }
         )
