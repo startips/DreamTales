@@ -162,7 +162,7 @@ class AppConfig(context: Context) {
         private const val KEY_THEME_MODE = "key_theme_mode"
         private const val KEY_PLAYBACK_MODE = "key_playback_mode"
         private const val KEY_GITHUB_REPO = "key_github_repo"
-        const val DEFAULT_GITHUB_REPO = "shadowx/DreamTales"
+        const val DEFAULT_GITHUB_REPO = "startips/DreamTales"
         private const val KEY_MIMO_API_KEY = "key_mimo_api_key"
         private const val KEY_BAILIAN_API_KEY = "key_bailian_api_key"
         private const val KEY_GEMINI_API_KEY = "key_gemini_api_key"
