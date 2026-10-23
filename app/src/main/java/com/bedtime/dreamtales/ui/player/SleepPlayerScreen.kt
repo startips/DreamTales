@@ -147,20 +147,17 @@ fun SleepPlayerScreen(
         }
     }
 
-    // 监听翻转扣屏感应：仅当正面朝下扣屏时熄屏；手持时恢复系统自然亮度
-    LaunchedEffect(isFaceDown) {
-        FlipSensorManager.applyWindowBrightness(activity, isFaceDown)
+    // 监听翻转扣屏感应：仅在播放界面按需启动传感器，离开播放页时停止监听并恢复自然亮度
+    DisposableEffect(Unit) {
+        flipSensorManager.startListening()
+        onDispose {
+            flipSensorManager.stopListening()
+            FlipSensorManager.applyWindowBrightness(activity, false)
+        }
     }
 
-    // 离开播放页时恢复常规亮度
-    DisposableEffect(Unit) {
-        onDispose {
-            activity?.window?.let { window ->
-                val params = window.attributes
-                params.screenBrightness = -1.0f
-                window.attributes = params
-            }
-        }
+    LaunchedEffect(isFaceDown) {
+        FlipSensorManager.applyWindowBrightness(activity, isFaceDown)
     }
 
     Box(

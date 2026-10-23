@@ -2,6 +2,7 @@ package com.bedtime.dreamtales.data.repository
 
 import android.content.Context
 import android.util.Base64
+import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.data.api.ApiClient
@@ -490,7 +491,7 @@ class StoryRepository(private val context: Context) {
 
         val backupPackage = StoryBackupPackage(
             app = "DreamTales",
-            version = "1.6.0",
+            version = BuildConfig.VERSION_NAME,
             exportedAt = System.currentTimeMillis(),
             stories = exportItems
         )

@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Binder
@@ -745,7 +746,20 @@ class StoryPlaybackService : MediaSessionService() {
             .setSilent(true)
             .build()
 
-        startForeground(AppConstants.PLAYBACK_NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                androidx.core.app.ServiceCompat.startForeground(
+                    this,
+                    AppConstants.PLAYBACK_NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(AppConstants.PLAYBACK_NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            // 防御 Android 14+ 后台启动前台服务时的权限或安全异常
+        }
     }
 
     override fun onDestroy() {

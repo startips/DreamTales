@@ -119,9 +119,22 @@ class AudioRecorderHelper(private val context: Context) {
                         }
                     }
                 } finally {
-                    fos.close()
+                    try {
+                        fos.close()
+                    } catch (e: Exception) {
+                        // ignore
+                    }
                     // 修正 WAV 头的实际数据长度
                     updateWavHeader(wavFile, totalBytesWritten, sampleRate, 1, 16)
+
+                    // 录音循环退出后，在后台协程安全释放 AudioRecord，杜绝跨线程并发 release 导致的异常
+                    try {
+                        audioRecord?.stop()
+                        audioRecord?.release()
+                        audioRecord = null
+                    } catch (e: Exception) {
+                        // ignore
+                    }
                 }
 
                 val finalDuration = ((System.currentTimeMillis() - startTimeMillis) / 1000).toInt()
@@ -149,17 +162,22 @@ class AudioRecorderHelper(private val context: Context) {
 
     fun stopRecording() {
         try {
+            // 仅调用 stop() 打断阻塞读，由录音协程的 finally 统一执行 release，防止 native 并发崩溃
             audioRecord?.stop()
-            audioRecord?.release()
-            audioRecord = null
         } catch (e: Exception) {
-            // 忽略重复释放
+            // 忽略重复调用
         }
     }
 
     fun reset() {
         stopRecording()
         recordingJob?.cancel()
+        try {
+            audioRecord?.release()
+            audioRecord = null
+        } catch (e: Exception) {
+            // ignore
+        }
         _status.value = RecordingStatus.Idle
     }
 

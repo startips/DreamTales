@@ -144,8 +144,20 @@ class AppUpdateManager(private val context: Context) {
         if (!updatesDir.exists()) updatesDir.mkdirs()
 
         val targetFile = File(updatesDir, apkFileName)
-        if (targetFile.exists()) {
-            targetFile.delete()
+        // 检查本地是否已存在完整且结构有效的 APK，若已完整下载则直接就绪，避免重复消耗流量
+        if (targetFile.exists() && targetFile.length() > 0) {
+            val pkgInfo = try {
+                context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
+            } catch (e: Exception) {
+                null
+            }
+            if (pkgInfo != null) {
+                emit(DownloadState.Downloading(100, targetFile.length(), targetFile.length()))
+                emit(DownloadState.Success(targetFile))
+                return@flow
+            } else {
+                targetFile.delete()
+            }
         }
 
         // 尝试直连与公共镜像

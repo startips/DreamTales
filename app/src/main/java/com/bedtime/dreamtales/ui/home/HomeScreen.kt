@@ -171,6 +171,7 @@ fun HomeScreen(
     val updateManager = remember { AppUpdateManager(context) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var newReleaseInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
+    var activeDownloadingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     var showDownloadDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -927,6 +928,7 @@ fun HomeScreen(
             releaseInfo = release,
             onStartDownload = {
                 val apkName = if (release.apkName.isNotBlank()) release.apkName else "DreamTales_${release.versionName}.apk"
+                activeDownloadingRelease = release
                 newReleaseInfo = null
                 showDownloadDialog = true
                 downloadState = DownloadState.Idle
@@ -953,10 +955,11 @@ fun HomeScreen(
                 downloadState = DownloadState.Idle
             },
             onRetry = {
-                // 重新尝试下载
-                val currentRelease = newReleaseInfo
+                // 重新尝试下载（使用暂存的 release 对象）
+                val currentRelease = activeDownloadingRelease
                 if (currentRelease != null) {
                     val apkName = if (currentRelease.apkName.isNotBlank()) currentRelease.apkName else "DreamTales_${currentRelease.versionName}.apk"
+                    downloadState = DownloadState.Idle
                     coroutineScope.launch {
                         updateManager.downloadApk(currentRelease.downloadUrl, apkName).collect { state ->
                             downloadState = state

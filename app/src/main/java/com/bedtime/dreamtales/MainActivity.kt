@@ -170,12 +170,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        flipSensorManager.startListening()
+        // 翻转扣屏传感器改由 SleepPlayerScreen 播放界面按需按时启动，避免全局空转耗电
     }
 
     override fun onPause() {
         super.onPause()
         flipSensorManager.stopListening()
+        FlipSensorManager.applyWindowBrightness(this, false)
     }
 
     override fun onDestroy() {
