@@ -79,6 +79,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -465,16 +466,36 @@ fun SleepPlayerScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 进度条与播放时间
+                    // 进度条与播放时间（支持平滑拖拽防抖与松手精准寻址，避免低端机型频繁 seek 越界或冲顶）
+                    var isDragging by remember(playbackState.storyId) { mutableStateOf(false) }
+                    var dragFraction by remember(playbackState.storyId) { mutableFloatStateOf(0f) }
+
+                    val currentFraction = if (playbackState.totalDurationMs > 0) {
+                        (playbackState.currentPositionMs.toFloat() / playbackState.totalDurationMs).coerceIn(0f, 1f)
+                    } else 0f
+
+                    val displayFraction = if (isDragging) dragFraction else currentFraction
+                    val displayPositionMs = if (isDragging && playbackState.totalDurationMs > 0) {
+                        (dragFraction * playbackState.totalDurationMs).toLong()
+                    } else {
+                        playbackState.currentPositionMs
+                    }
+
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Slider(
-                            value = if (playbackState.totalDurationMs > 0) {
-                                (playbackState.currentPositionMs.toFloat() / playbackState.totalDurationMs).coerceIn(0f, 1f)
-                            } else 0f,
+                            value = displayFraction,
                             onValueChange = { fraction ->
-                                val newPos = (fraction * playbackState.totalDurationMs).toLong()
-                                viewModel.seekTo(newPos)
+                                isDragging = true
+                                dragFraction = fraction.coerceIn(0f, 1f)
                             },
+                            onValueChangeFinished = {
+                                if (playbackState.totalDurationMs > 0) {
+                                    val newPos = (dragFraction * playbackState.totalDurationMs).toLong().coerceIn(0L, playbackState.totalDurationMs)
+                                    viewModel.seekTo(newPos)
+                                }
+                                isDragging = false
+                            },
+                            enabled = playbackState.totalDurationMs > 0,
                             colors = SliderDefaults.colors(
                                 thumbColor = MaterialTheme.colorScheme.primary,
                                 activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -488,7 +509,7 @@ fun SleepPlayerScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = formatTime(playbackState.currentPositionMs / 1000),
+                                text = formatTime(displayPositionMs / 1000),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

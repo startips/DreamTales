@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private val homeViewModel: HomeViewModel by viewModels()
     private val recordViewModel: RecordVoiceViewModel by viewModels()
     private val playerViewModel: SleepPlayerViewModel by viewModels()
+    private var pendingStoryToPlay: Pair<com.bedtime.dreamtales.data.local.entity.Story, String>? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -48,6 +49,16 @@ class MainActivity : ComponentActivity() {
                 playbackService = binder.getService()
                 playerViewModel.attachService(binder.getService())
                 isBound = true
+                pendingStoryToPlay?.let { (story, path) ->
+                    playbackService?.playStoryAudio(
+                        storyId = story.id,
+                        storyTitle = story.title,
+                        storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
+                        localFilePath = path,
+                        autoPlay = false
+                    )
+                    pendingStoryToPlay = null
+                }
             }
         }
 
@@ -114,13 +125,18 @@ class MainActivity : ComponentActivity() {
                             },
                             onPlayStory = { story, localFilePath ->
                                 // autoPlay = false：进入播放器先处于就绪待命模式，用户主动点击后再开播
-                                playbackService?.playStoryAudio(
-                                    storyId = story.id,
-                                    storyTitle = story.title,
-                                    storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
-                                    localFilePath = localFilePath,
-                                    autoPlay = false
-                                )
+                                val currentService = playbackService
+                                if (currentService != null) {
+                                    currentService.playStoryAudio(
+                                        storyId = story.id,
+                                        storyTitle = story.title,
+                                        storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
+                                        localFilePath = localFilePath,
+                                        autoPlay = false
+                                    )
+                                } else {
+                                    pendingStoryToPlay = story to localFilePath
+                                }
                                 navController.navigate(Screen.SleepPlayer.route)
                             }
                         )

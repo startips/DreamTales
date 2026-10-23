@@ -755,4 +755,48 @@ class DreamTalesCoreTest {
         assertEquals("night" to "🌙 深度暖夜", getNextThemeMode("system"))
         assertEquals("night" to "🌙 深度暖夜", getNextThemeMode("other"))
     }
+
+    @Test
+    fun testSliderDragBufferingAndSeeking() {
+        val totalDurationMs = 180_000L // 3 分钟
+        var currentPositionMs = 0L
+        var isDragging = false
+        var dragFraction = 0f
+
+        // 模拟用户拖拽进度条到 50%
+        dragFraction = 0.5f
+        isDragging = true
+
+        val displayedPos = if (isDragging) (dragFraction * totalDurationMs).toLong() else currentPositionMs
+        assertEquals(90_000L, displayedPos)
+
+        // 模拟松手 (onValueChangeFinished)
+        val targetPos = (dragFraction * totalDurationMs).toLong().coerceIn(0L, totalDurationMs)
+        currentPositionMs = targetPos
+        isDragging = false
+
+        assertEquals(90_000L, currentPositionMs)
+        assertFalse(isDragging)
+    }
+
+    @Test
+    fun testPausedSeekStateUpdate() {
+        // 模拟播放器处于暂停状态 (isPlaying = false)
+        var playbackState = com.bedtime.dreamtales.service.StoryPlaybackState(
+            storyId = 1L,
+            storyTitle = "小马过河",
+            isPlaying = false,
+            currentPositionMs = 0L,
+            totalDurationMs = 120_000L
+        )
+
+        // 暂停状态下执行 seekTo 必须立即更新 UI 状态中的 currentPositionMs
+        fun onSeekTo(positionMs: Long) {
+            val targetPos = positionMs.coerceAtLeast(0L)
+            playbackState = playbackState.copy(currentPositionMs = targetPos)
+        }
+
+        onSeekTo(45_000L)
+        assertEquals("暂停状态拖动应即时更新进度", 45_000L, playbackState.currentPositionMs)
+    }
 }

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -16,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -169,11 +171,21 @@ class StoryPlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
                     updateState {
-                        it.copy(totalDurationMs = max(0L, exoPlayer.duration))
+                        it.copy(
+                            totalDurationMs = max(0L, exoPlayer.duration),
+                            currentPositionMs = max(0L, exoPlayer.currentPosition)
+                        )
                     }
                 } else if (state == Player.STATE_ENDED) {
                     handlePlaybackEnded()
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                updateState {
+                    it.copy(isPlaying = false)
+                }
+                releaseWakeLock()
             }
         })
 
@@ -261,12 +273,15 @@ class StoryPlaybackService : MediaSessionService() {
                 storyContent = storyContent,
                 coverImagePath = existingCover,
                 currentSpeed = 1.0f,
-                isPlaying = autoPlay
+                isPlaying = autoPlay,
+                currentPositionMs = 0L,
+                totalDurationMs = 0L
             )
         }
 
-        val mediaItem = MediaItem.fromUri(file.toURI().toString())
+        val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
         exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.seekTo(0L)
         exoPlayer.prepare()
         if (autoPlay) {
             exoPlayer.play()
@@ -294,6 +309,9 @@ class StoryPlaybackService : MediaSessionService() {
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
         } else {
+            if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                exoPlayer.seekTo(0L)
+            }
             exoPlayer.play()
         }
     }
@@ -303,11 +321,16 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     fun resume() {
+        if (exoPlayer.playbackState == Player.STATE_ENDED) {
+            exoPlayer.seekTo(0L)
+        }
         exoPlayer.play()
     }
 
     fun seekTo(positionMs: Long) {
-        exoPlayer.seekTo(positionMs)
+        val targetPos = positionMs.coerceAtLeast(0L)
+        exoPlayer.seekTo(targetPos)
+        updateState { it.copy(currentPositionMs = targetPos) }
     }
 
     fun setPlaybackMode(mode: PlaybackMode) {
