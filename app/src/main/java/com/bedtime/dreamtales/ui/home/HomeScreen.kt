@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -85,6 +86,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -92,6 +94,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -174,6 +179,45 @@ fun HomeScreen(
     var activeDownloadingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     var showDownloadDialog by remember { mutableStateOf(false) }
+    var pendingInstallFile by remember { mutableStateOf<File?>(null) }
+
+    // 监听应用返回前台：若此前引导开启了“安装未知应用”权限，返回时自动续接调起安装
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                pendingInstallFile?.let { file ->
+                    if (file.exists()) {
+                        val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.packageManager.canRequestPackageInstalls()
+                        } else true
+                        if (canInstall) {
+                            val success = updateManager.installApk(file)
+                            if (success) {
+                                pendingInstallFile = null
+                            }
+                        }
+                    } else {
+                        pendingInstallFile = null
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // 启动主页时后台静默检测是否有新版本，有则温柔弹窗提示更新
+    LaunchedEffect(Unit) {
+        val repo = viewModel.getGithubRepo()
+        updateManager.checkForUpdate(repo).collect { result ->
+            if (result is UpdateCheckResult.HasUpdate) {
+                newReleaseInfo = result.releaseInfo
+            }
+        }
+    }
     var searchQuery by remember { mutableStateOf("") }
     var localSearchQuery by remember { mutableStateOf("") }
     var selectedStoryToRead by remember { mutableStateOf<com.bedtime.dreamtales.data.local.entity.Story?>(null) }
@@ -896,28 +940,6 @@ fun HomeScreen(
             onClearCacheClick = {
                 showClearCacheConfirm = true
             },
-            onCheckUpdateClick = {
-                if (isCheckingUpdate) return@SettingsDialog
-                isCheckingUpdate = true
-                Toast.makeText(context, "正在检测 GitHub 最新版本...", Toast.LENGTH_SHORT).show()
-                coroutineScope.launch {
-                    val repo = viewModel.getGithubRepo()
-                    updateManager.checkForUpdate(repo).collect { result ->
-                        isCheckingUpdate = false
-                        when (result) {
-                            is UpdateCheckResult.HasUpdate -> {
-                                newReleaseInfo = result.releaseInfo
-                            }
-                            is UpdateCheckResult.UpToDate -> {
-                                Toast.makeText(context, "🎉 当前已是最新版本 (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
-                            }
-                            is UpdateCheckResult.Error -> {
-                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                }
-            },
             onDismiss = { showSettingsDialog = false }
         )
     }
@@ -937,7 +959,11 @@ fun HomeScreen(
                         downloadState = state
                         if (state is DownloadState.Success) {
                             showDownloadDialog = false
-                            updateManager.installApk(state.apkFile)
+                            val success = updateManager.installApk(state.apkFile)
+                            if (!success && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                                pendingInstallFile = state.apkFile
+                                Toast.makeText(context, "请在系统设置中开启‘允许安装未知应用’后返回", Toast.LENGTH_LONG).show()
+                            }
                         }
                     }
                 }
@@ -965,7 +991,11 @@ fun HomeScreen(
                             downloadState = state
                             if (state is DownloadState.Success) {
                                 showDownloadDialog = false
-                                updateManager.installApk(state.apkFile)
+                                val success = updateManager.installApk(state.apkFile)
+                                if (!success && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                                    pendingInstallFile = state.apkFile
+                                    Toast.makeText(context, "请在系统设置中开启‘允许安装未知应用’后返回", Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     }
@@ -1080,6 +1110,30 @@ fun HomeScreen(
     // 关于应用弹窗
     if (showAboutDialog) {
         AboutDialog(
+            isCheckingUpdate = isCheckingUpdate,
+            onCheckUpdateClick = {
+                if (isCheckingUpdate) return@AboutDialog
+                isCheckingUpdate = true
+                Toast.makeText(context, "正在检测最新版本...", Toast.LENGTH_SHORT).show()
+                coroutineScope.launch {
+                    val repo = viewModel.getGithubRepo()
+                    updateManager.checkForUpdate(repo).collect { result ->
+                        isCheckingUpdate = false
+                        when (result) {
+                            is UpdateCheckResult.HasUpdate -> {
+                                showAboutDialog = false
+                                newReleaseInfo = result.releaseInfo
+                            }
+                            is UpdateCheckResult.UpToDate -> {
+                                Toast.makeText(context, "🎉 当前已是最新版本 (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                            }
+                            is UpdateCheckResult.Error -> {
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            },
             onDismiss = { showAboutDialog = false }
         )
     }

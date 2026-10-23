@@ -1,0 +1,18 @@
+{
+  "tag_name": "v2.0.2",
+  "name": "v2.0.2",
+  "versionName": "2.0.2",
+  "versionCode": 4,
+  "body": "1. 修复自动更新在国产定制系统及弱网环境下的兼容性\n2. 将‘检查更新’功能迁移至关于应用弹窗\n3. 优化国内网络镜像多路加速解析通道\n4. 完善未知应用安装权限引导与安装器授权",
+  "published_at": "2026-10-24T00:00:00Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.0.2/DreamTales-v2.0.2.apk",
+  "apkName": "DreamTales-v2.0.2.apk",
+  "apkSizeBytes": 25122422,
+  "assets": [
+    {
+      "name": "DreamTales-v2.0.2.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.0.2/DreamTales-v2.0.2.apk",
+      "size": 25122422
+    }
+  ]
+}

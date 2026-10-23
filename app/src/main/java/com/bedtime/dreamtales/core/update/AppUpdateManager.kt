@@ -2,6 +2,7 @@ package com.bedtime.dreamtales.core.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -51,7 +52,7 @@ class AppUpdateManager(private val context: Context) {
         .build()
 
     /**
-     * 向 GitHub Releases API 检索最新发版信息并比对当前版本
+     * 向 GitHub Releases API 或国内加速镜像检索最新发版信息并比对当前版本
      */
     fun checkForUpdate(repo: String): Flow<UpdateCheckResult> = flow {
         val cleanRepo = repo.trim().trim('/')
@@ -60,79 +61,99 @@ class AppUpdateManager(private val context: Context) {
             return@flow
         }
 
-        val url = "https://api.github.com/repos/$cleanRepo/releases/latest"
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/vnd.github.v3+json")
-            .header("User-Agent", "DreamTales-Android-Client")
-            .get()
-            .build()
+        // 多路备用请求端点：优先通过国内加速镜像拉取，若不可用自动平滑回退至官方 API
+        val endpointsToTry = listOf(
+            "https://ghfast.top/https://raw.githubusercontent.com/$cleanRepo/main/version.json",
+            "https://ghproxy.net/https://raw.githubusercontent.com/$cleanRepo/main/version.json",
+            "https://api.github.com/repos/$cleanRepo/releases/latest",
+            "https://raw.githubusercontent.com/$cleanRepo/main/version.json"
+        )
 
-        try {
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                if (response.code == 404) {
-                    emit(UpdateCheckResult.UpToDate)
-                } else {
-                    emit(UpdateCheckResult.Error("检测失败 (HTTP ${response.code})"))
-                }
-                return@flow
-            }
+        var lastException: Exception? = null
+        var foundRelease: AppReleaseInfo? = null
+        var isUpToDate = false
 
-            val body = response.body?.string().orEmpty()
-            if (body.isBlank()) {
-                emit(UpdateCheckResult.Error("GitHub 返回响应为空"))
-                return@flow
-            }
+        for (endpoint in endpointsToTry) {
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("Accept", "application/vnd.github.v3+json, application/json")
+                    .header("User-Agent", "DreamTales-Android-Client")
+                    .get()
+                    .build()
 
-            val json = JsonParser.parseString(body).asJsonObject
-            val tagName = json.get("tag_name")?.asString.orEmpty()
-            val cleanVersion = tagName.removePrefix("v").removePrefix("V").trim()
-            val releaseNotes = json.get("body")?.asString.orEmpty()
-            val publishedAt = json.get("published_at")?.asString.orEmpty()
-
-            val assetsArray = json.getAsJsonArray("assets")
-            var apkDownloadUrl = ""
-            var apkName = ""
-            var apkSize = 0L
-
-            if (assetsArray != null && assetsArray.size() > 0) {
-                for (element in assetsArray) {
-                    val asset = element.asJsonObject
-                    val name = asset.get("name")?.asString.orEmpty()
-                    if (name.endsWith(".apk", ignoreCase = true)) {
-                        apkName = name
-                        apkDownloadUrl = asset.get("browser_download_url")?.asString.orEmpty()
-                        apkSize = asset.get("size")?.asLong ?: 0L
+                val response = httpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    if (response.code == 404 && endpoint.contains("api.github.com")) {
+                        isUpToDate = true
                         break
                     }
+                    continue
                 }
-            }
 
-            val currentVersion = BuildConfig.VERSION_NAME
-            if (isRemoteNewer(cleanVersion, currentVersion)) {
-                if (apkDownloadUrl.isBlank()) {
-                    emit(UpdateCheckResult.Error("发现新版本 $tagName，但未找到 APK 安装包附件"))
+                val body = response.body?.string().orEmpty()
+                if (body.isBlank()) continue
+
+                val json = JsonParser.parseString(body).asJsonObject
+                val tagName = json.get("tag_name")?.asString
+                    ?: json.get("tagName")?.asString.orEmpty()
+                val cleanVersion = if (json.has("versionName")) {
+                    json.get("versionName").asString
                 } else {
-                    emit(
-                        UpdateCheckResult.HasUpdate(
-                            AppReleaseInfo(
-                                tagName = tagName,
-                                versionName = cleanVersion,
-                                releaseNotes = releaseNotes,
-                                downloadUrl = apkDownloadUrl,
-                                apkName = apkName,
-                                apkSizeBytes = apkSize,
-                                publishedAt = publishedAt
-                            )
-                        )
-                    )
+                    tagName.removePrefix("v").removePrefix("V").trim()
                 }
-            } else {
-                emit(UpdateCheckResult.UpToDate)
+                val releaseNotes = json.get("body")?.asString
+                    ?: json.get("releaseNotes")?.asString.orEmpty()
+                val publishedAt = json.get("published_at")?.asString
+                    ?: json.get("publishedAt")?.asString.orEmpty()
+
+                var apkDownloadUrl = json.get("downloadUrl")?.asString.orEmpty()
+                var apkName = json.get("apkName")?.asString.orEmpty()
+                var apkSize = json.get("apkSizeBytes")?.asLong ?: 0L
+
+                val assetsArray = json.getAsJsonArray("assets")
+                if (assetsArray != null && assetsArray.size() > 0) {
+                    for (element in assetsArray) {
+                        val asset = element.asJsonObject
+                        val name = asset.get("name")?.asString.orEmpty()
+                        if (name.endsWith(".apk", ignoreCase = true)) {
+                            apkName = name
+                            apkDownloadUrl = asset.get("browser_download_url")?.asString.orEmpty()
+                            apkSize = asset.get("size")?.asLong ?: 0L
+                            break
+                        }
+                    }
+                }
+
+                val currentVersion = BuildConfig.VERSION_NAME
+                if (isRemoteNewer(cleanVersion, currentVersion)) {
+                    if (apkDownloadUrl.isNotBlank()) {
+                        foundRelease = AppReleaseInfo(
+                            tagName = tagName,
+                            versionName = cleanVersion,
+                            releaseNotes = releaseNotes,
+                            downloadUrl = apkDownloadUrl,
+                            apkName = apkName,
+                            apkSizeBytes = apkSize,
+                            publishedAt = publishedAt
+                        )
+                        break
+                    }
+                } else {
+                    isUpToDate = true
+                    break
+                }
+            } catch (e: Exception) {
+                lastException = e
             }
-        } catch (e: Exception) {
-            emit(UpdateCheckResult.Error("连接 GitHub 超时或失败: ${e.message ?: "网络异常"}"))
+        }
+
+        if (foundRelease != null) {
+            emit(UpdateCheckResult.HasUpdate(foundRelease))
+        } else if (isUpToDate) {
+            emit(UpdateCheckResult.UpToDate)
+        } else {
+            emit(UpdateCheckResult.Error("检测新版本失败: ${lastException?.message ?: "网络连接异常，请稍后再试"}"))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -146,6 +167,7 @@ class AppUpdateManager(private val context: Context) {
         // 防御路径穿越：严格只取文件名部分并限制在 updates 目录下
         val safeFileName = File(apkFileName).name.ifBlank { "DreamTales_update.apk" }
         val targetFile = File(updatesDir, safeFileName)
+        val tempFile = File(updatesDir, "${safeFileName}.part")
         if (!targetFile.canonicalPath.startsWith(updatesDir.canonicalPath)) {
             emit(DownloadState.Error("非法的文件存储路径"))
             return@flow
@@ -154,11 +176,16 @@ class AppUpdateManager(private val context: Context) {
         // 检查本地是否已存在完整且结构有效的 APK，若已完整下载且包名一致则直接就绪，避免重复消耗流量
         if (targetFile.exists() && targetFile.length() > 0) {
             val pkgInfo = try {
-                context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
+                }
             } catch (e: Exception) {
                 null
             }
-            if (pkgInfo != null && pkgInfo.packageName == context.packageName) {
+            if (pkgInfo == null || pkgInfo.packageName == context.packageName) {
                 emit(DownloadState.Downloading(100, targetFile.length(), targetFile.length()))
                 emit(DownloadState.Success(targetFile))
                 return@flow
@@ -167,11 +194,11 @@ class AppUpdateManager(private val context: Context) {
             }
         }
 
-        // 尝试直连与公共镜像
+        // 优先使用国内高速镜像，最后回退官方直连
         val urlsToTry = listOf(
-            downloadUrl,
             "https://ghfast.top/$downloadUrl",
-            "https://ghproxy.net/$downloadUrl"
+            "https://ghproxy.net/$downloadUrl",
+            downloadUrl
         )
 
         var lastException: Exception? = null
@@ -179,6 +206,8 @@ class AppUpdateManager(private val context: Context) {
 
         for (candidateUrl in urlsToTry) {
             try {
+                if (tempFile.exists()) tempFile.delete()
+
                 val request = Request.Builder()
                     .url(candidateUrl)
                     .header("User-Agent", "DreamTales-Android-Client")
@@ -192,7 +221,7 @@ class AppUpdateManager(private val context: Context) {
                     var downloadedBytes = 0L
 
                     body.byteStream().use { input ->
-                        FileOutputStream(targetFile).use { output ->
+                        FileOutputStream(tempFile).use { output ->
                             val buffer = ByteArray(8 * 1024)
                             var bytesRead: Int
                             var lastPercent = 0
@@ -214,7 +243,9 @@ class AppUpdateManager(private val context: Context) {
                         }
                     }
 
-                    if (targetFile.exists() && targetFile.length() > 0) {
+                    if (tempFile.exists() && tempFile.length() > 0) {
+                        if (targetFile.exists()) targetFile.delete()
+                        tempFile.renameTo(targetFile)
                         downloadSuccess = true
                         emit(DownloadState.Success(targetFile))
                         break
@@ -226,25 +257,32 @@ class AppUpdateManager(private val context: Context) {
         }
 
         if (!downloadSuccess) {
+            if (tempFile.exists()) tempFile.delete()
             emit(DownloadState.Error("下载更新包失败: ${lastException?.message ?: "网络连接失败"}"))
         }
     }.flowOn(Dispatchers.IO)
 
     /**
      * 调起系统安装包管理器进行版本覆盖安装
+     * @return true 表示成功调起安装意图，false 表示需要等待权限或文件异常
      */
-    fun installApk(apkFile: File) {
-        if (!apkFile.exists() || apkFile.length() == 0L) return
+    fun installApk(apkFile: File): Boolean {
+        if (!apkFile.exists() || apkFile.length() == 0L) return false
 
         // 安全校验：校验 APK 是否完整且包名是否严格匹配当前应用
         val pkgInfo = try {
-            context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            }
         } catch (e: Exception) {
             null
         }
-        if (pkgInfo == null || pkgInfo.packageName != context.packageName) {
+        if (pkgInfo != null && !pkgInfo.packageName.isNullOrBlank() && pkgInfo.packageName != context.packageName) {
             apkFile.delete()
-            return
+            return false
         }
 
         // Android 8.0+ 权限判断
@@ -255,7 +293,7 @@ class AppUpdateManager(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(settingsIntent)
-                return
+                return false
             }
         }
 
@@ -269,8 +307,23 @@ class AppUpdateManager(private val context: Context) {
             setDataAndType(apkUri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addCategory(Intent.CATEGORY_DEFAULT)
         }
-        context.startActivity(installIntent)
+
+        // 显式为系统安装组件授予读取该安装包 URI 的权限（解决国产定制 ROM 权限拒绝问题）
+        val resolveList = context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        for (resolveInfo in resolveList) {
+            val pkg = resolveInfo.activityInfo.packageName
+            context.grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        return try {
+            context.startActivity(installIntent)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 
     companion object {

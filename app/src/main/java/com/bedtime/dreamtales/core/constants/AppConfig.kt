@@ -161,8 +161,12 @@ class AppConfig(context: Context) {
     }
 
     fun getGithubRepo(): String {
-        return prefs.getString(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)?.trim()
-            ?.ifEmpty { DEFAULT_GITHUB_REPO } ?: DEFAULT_GITHUB_REPO
+        val repo = prefs.getString(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)?.trim()
+        if (repo.isNullOrBlank() || repo.contains("shadowx")) {
+            setGithubRepo(DEFAULT_GITHUB_REPO)
+            return DEFAULT_GITHUB_REPO
+        }
+        return repo
     }
 
     fun setGithubRepo(repo: String) {
