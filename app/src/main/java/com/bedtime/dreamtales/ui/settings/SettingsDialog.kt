@@ -91,7 +91,7 @@ fun SettingsDialog(
                 Text(text = "⚙️", fontSize = 22.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "伴读与数据设置",
+                    text = "设置",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -106,7 +106,7 @@ fun SettingsDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 1. 数据备份与书单导入导出
-                SettingSectionCard(title = "📚 故事书单数据管理") {
+                SettingSectionCard(title = "📚 书单备份") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -122,7 +122,7 @@ fun SettingsDialog(
                         ) {
                             Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("导出书单 (JSON)", style = MaterialTheme.typography.labelSmall)
+                            Text("导出书单", style = MaterialTheme.typography.labelSmall)
                         }
 
                         OutlinedButton(
@@ -142,7 +142,7 @@ fun SettingsDialog(
                 }
 
                 // 2. 离线缓存管理
-                SettingSectionCard(title = "📦 本地离线音频缓存") {
+                SettingSectionCard(title = "📦 音频缓存") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -150,14 +150,14 @@ fun SettingsDialog(
                     ) {
                         Column {
                             Text(
-                                text = "占用空间：${String.format("%.1f", cacheSizeMb)} MB",
+                                text = "已占用 ${String.format("%.1f", cacheSizeMb)} MB",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (cacheCount > 0) "已离线缓存 $cacheCount 篇故事音频" else "暂无已缓存音频",
+                                text = if (cacheCount > 0) "共 $cacheCount 篇故事音频" else "暂无缓存",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
@@ -175,7 +175,7 @@ fun SettingsDialog(
                         ) {
                             Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("清理缓存", style = MaterialTheme.typography.labelSmall)
+                            Text("清理", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

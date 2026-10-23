@@ -347,7 +347,7 @@ fun HomeScreen(
                                 onDismissRequest = { showTopMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("✍️ 手动/粘贴录入新故事") },
+                                    text = { Text("✍️ 录入故事") },
                                     onClick = {
                                         showTopMenu = false
                                         showAddStoryDialog = true
@@ -357,7 +357,7 @@ fun HomeScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("⚙️ 伴读与数据设置") },
+                                    text = { Text("⚙️ 设置") },
                                     onClick = {
                                         showTopMenu = false
                                         viewModel.refreshCacheInfo()
@@ -368,7 +368,7 @@ fun HomeScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("ℹ️ 关于 DreamTales") },
+                                    text = { Text("ℹ️ 关于") },
                                     onClick = {
                                         showTopMenu = false
                                         showAboutDialog = true
@@ -947,7 +947,7 @@ fun HomeScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             title = {
                 Text(
-                    text = "确认清理离线音频缓存？",
+                    text = "清理音频缓存？",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -955,7 +955,7 @@ fun HomeScreen(
             },
             text = {
                 Text(
-                    text = "清理后将删除本地已缓存的音频文件（释放约 ${String.format("%.1f", cacheSizeMb)} MB 空间）。故事文本与个人录音将完好保留，下次播放时会自动重新获取。",
+                    text = "将删除本地已缓存音频并释放约 ${String.format("%.1f", cacheSizeMb)} MB 空间。故事文本完好保留，后续播放将重新生成。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
