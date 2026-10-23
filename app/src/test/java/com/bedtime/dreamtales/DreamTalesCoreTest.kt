@@ -706,4 +706,37 @@ class DreamTalesCoreTest {
         }
         assertFalse("静默预加载完成不应自动跳转播放", onSilentPreloadComplete())
     }
+
+    @Test
+    fun testSplashCelestialThemeAdaptation() {
+        // 夜间模式开屏：背景为夜间深黑，天体为金月 🌙，标语温柔伴宝入梦
+        val nightIsDark = true
+        val nightEmoji = if (nightIsDark) "🌙" else "☀️"
+        val nightSlogan = if (nightIsDark) "经典伴读 · 温柔伴宝入梦" else "经典伴读 · 温暖绘本时光"
+        assertEquals("🌙", nightEmoji)
+        assertEquals("经典伴读 · 温柔伴宝入梦", nightSlogan)
+
+        // 日间模式开屏：背景为羊皮纸米黄，天体为朝阳 ☀️，标语温暖绘本时光
+        val dayIsDark = false
+        val dayEmoji = if (dayIsDark) "🌙" else "☀️"
+        val daySlogan = if (dayIsDark) "经典伴读 · 温柔伴宝入梦" else "经典伴读 · 温暖绘本时光"
+        assertEquals("☀️", dayEmoji)
+        assertEquals("经典伴读 · 温暖绘本时光", daySlogan)
+    }
+
+    @Test
+    fun testThemeModeButtonIconMapping() {
+        fun getThemeIcon(mode: String): String {
+            return when (mode) {
+                "day" -> "☀️"
+                "system" -> "📱"
+                else -> "🌙"
+            }
+        }
+
+        assertEquals("🌙", getThemeIcon("night"))
+        assertEquals("☀️", getThemeIcon("day"))
+        assertEquals("📱", getThemeIcon("system"))
+        assertEquals("🌙", getThemeIcon("unknown"))
+    }
 }

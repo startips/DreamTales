@@ -159,6 +159,7 @@ fun HomeScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showAddStoryDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
+    var showThemeMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var localSearchQuery by remember { mutableStateOf("") }
@@ -224,14 +225,17 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                // 顶部导航栏：Logo + 右上角标准更多菜单
+                // 顶部导航栏：Logo + 右上角外观切换小图标与更多菜单
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "🌙", fontSize = 22.sp)
+                        Text(
+                            text = if (themeMode == "day") "☀️" else "🌙",
+                            fontSize = 22.sp
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "DreamTales",
@@ -241,51 +245,139 @@ fun HomeScreen(
                         )
                     }
 
-                    // 右上角常规 APP 菜单体系
-                    Box {
-                        IconButton(onClick = { showTopMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "更多设置",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                    // 右上角操作区：外观切换小图标 + 常规更多菜单（并列）
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 1. 外观切换小图标按钮（点击随时切换日间绘本/夜间伴读/跟随系统）
+                        Box {
+                            IconButton(onClick = { showThemeMenu = true }) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Text(
+                                            text = when (themeMode) {
+                                                "day" -> "☀️"
+                                                "system" -> "📱"
+                                                else -> "🌙"
+                                            },
+                                            fontSize = 15.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showThemeMenu,
+                                onDismissRequest = { showThemeMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "🌙 深度暖夜",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (themeMode == "night") FontWeight.Bold else FontWeight.Normal,
+                                            color = if (themeMode == "night") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setThemeMode("night")
+                                        showThemeMenu = false
+                                        Toast.makeText(context, "已切换至 🌙 深度暖夜模式", Toast.LENGTH_SHORT).show()
+                                    },
+                                    trailingIcon = if (themeMode == "night") {
+                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "☀️ 绘本米黄",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (themeMode == "day") FontWeight.Bold else FontWeight.Normal,
+                                            color = if (themeMode == "day") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setThemeMode("day")
+                                        showThemeMenu = false
+                                        Toast.makeText(context, "已切换至 ☀️ 绘本米黄模式", Toast.LENGTH_SHORT).show()
+                                    },
+                                    trailingIcon = if (themeMode == "day") {
+                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "📱 跟随系统",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (themeMode == "system") FontWeight.Bold else FontWeight.Normal,
+                                            color = if (themeMode == "system") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setThemeMode("system")
+                                        showThemeMenu = false
+                                        Toast.makeText(context, "已切换至 📱 跟随系统模式", Toast.LENGTH_SHORT).show()
+                                    },
+                                    trailingIcon = if (themeMode == "system") {
+                                        { Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
                         }
 
-                        DropdownMenu(
-                            expanded = showTopMenu,
-                            onDismissRequest = { showTopMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("✍️ 手动/粘贴录入新故事") },
-                                onClick = {
-                                    showTopMenu = false
-                                    showAddStoryDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("⚙️ 伴读与数据设置") },
-                                onClick = {
-                                    showTopMenu = false
-                                    viewModel.refreshCacheInfo()
-                                    showSettingsDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("ℹ️ 关于 DreamTales") },
-                                onClick = {
-                                    showTopMenu = false
-                                    showAboutDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            )
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // 2. 更多设置菜单体系
+                        Box {
+                            IconButton(onClick = { showTopMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "更多设置",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showTopMenu,
+                                onDismissRequest = { showTopMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("✍️ 手动/粘贴录入新故事") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showAddStoryDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("⚙️ 伴读与数据设置") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        viewModel.refreshCacheInfo()
+                                        showSettingsDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("ℹ️ 关于 DreamTales") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showAboutDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
