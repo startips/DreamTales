@@ -57,6 +57,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AboutDialog(
     isCheckingUpdate: Boolean,
+    availableUpdateVersion: String? = null,
     onCheckUpdateClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -64,6 +65,7 @@ fun AboutDialog(
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var isExportingDiagnostics by remember { mutableStateOf(false) }
+    val hasAvailableUpdate = !availableUpdateVersion.isNullOrBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -131,13 +133,21 @@ fun AboutDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "当前版本 v${BuildConfig.VERSION_NAME}",
+                                    text = if (hasAvailableUpdate) {
+                                        "发现新版本 v$availableUpdateVersion"
+                                    } else {
+                                        "当前版本 v${BuildConfig.VERSION_NAME}"
+                                    },
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "有新版本会温柔提醒",
+                                    text = if (hasAvailableUpdate) {
+                                        "当前版本 v${BuildConfig.VERSION_NAME}"
+                                    } else {
+                                        "有新版本会在这里提示"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -167,7 +177,10 @@ fun AboutDialog(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("检查更新", style = MaterialTheme.typography.labelSmall)
+                                    Text(
+                                        text = if (hasAvailableUpdate) "更新" else "检查更新",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
                                 }
                             }
                         }

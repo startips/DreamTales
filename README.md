@@ -146,8 +146,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    在 GitHub 仓库 **Settings ➡️ Secrets and variables ➡️ Actions** 中添加 API 密钥（如 `DEFAULT_MIMO_API_KEY`、`DEFAULT_CPA_API_KEY` 等），以及固定发布签名所需的 `RELEASE_KEYSTORE_BASE64`、`RELEASE_KEYSTORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。
 2. **打 Tag 并推送到仓库**：
    ```bash
-   git tag v2.1.3
-   git push origin v2.1.3
+   git tag v2.1.4
+   git push origin v2.1.4
    ```
 3. GitHub Actions 将构建 **正式 Release APK**（`assembleRelease`，非 debug 包）并自动创建 GitHub Release，随后把 `version.json` 同步回 `main`。客户端会优先读取 `version.json`，因此能立即感知新版本并弹窗提示更新。
 

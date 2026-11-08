@@ -215,6 +215,8 @@ fun HomeScreen(
     val updateManager = remember { AppUpdateManager(context) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var newReleaseInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
+    // 静默检测到的更新：只在右上角菜单显示小圆点，不主动弹窗
+    var availableUpdate by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var activeDownloadingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     var showDownloadDialog by remember { mutableStateOf(false) }
@@ -248,12 +250,14 @@ fun HomeScreen(
         }
     }
 
-    // 启动主页时后台静默检测是否有新版本，有则温柔弹窗提示更新
+    // 启动主页时后台静默检测；发现更新只在右上角菜单显示小圆点，不弹窗打扰
     LaunchedEffect(Unit) {
         val repo = viewModel.getGithubRepo()
         updateManager.checkForUpdate(repo).collect { result ->
-            if (result is UpdateCheckResult.HasUpdate) {
-                newReleaseInfo = result.releaseInfo
+            when (result) {
+                is UpdateCheckResult.HasUpdate -> availableUpdate = result.releaseInfo
+                is UpdateCheckResult.UpToDate -> availableUpdate = null
+                is UpdateCheckResult.Error -> Unit
             }
         }
     }
@@ -402,6 +406,15 @@ fun HomeScreen(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
+                            if (availableUpdate != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 9.dp, end = 9.dp)
+                                        .size(7.dp)
+                                        .background(MaterialTheme.colorScheme.error, CircleShape)
+                                )
+                            }
 
                             DropdownMenu(
                                 expanded = showTopMenu,
@@ -459,7 +472,22 @@ fun HomeScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("ℹ️ 关于") },
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("ℹ️ 关于")
+                                            if (availableUpdate != null) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .background(
+                                                            MaterialTheme.colorScheme.error,
+                                                            CircleShape
+                                                        )
+                                                )
+                                            }
+                                        }
+                                    },
                                     onClick = {
                                         showTopMenu = false
                                         showAboutDialog = true
@@ -1252,8 +1280,16 @@ fun HomeScreen(
     if (showAboutDialog) {
         AboutDialog(
             isCheckingUpdate = isCheckingUpdate,
+            availableUpdateVersion = availableUpdate?.versionName,
             onCheckUpdateClick = {
                 if (isCheckingUpdate) return@AboutDialog
+                val knownUpdate = availableUpdate
+                if (knownUpdate != null) {
+                    // 已经在后台静默发现更新：用户主动点「更新」后才打开更新弹窗
+                    showAboutDialog = false
+                    newReleaseInfo = knownUpdate
+                    return@AboutDialog
+                }
                 isCheckingUpdate = true
                 Toast.makeText(context, "正在检测最新版本...", Toast.LENGTH_SHORT).show()
                 coroutineScope.launch {
@@ -1262,10 +1298,12 @@ fun HomeScreen(
                         isCheckingUpdate = false
                         when (result) {
                             is UpdateCheckResult.HasUpdate -> {
+                                availableUpdate = result.releaseInfo
                                 showAboutDialog = false
                                 newReleaseInfo = result.releaseInfo
                             }
                             is UpdateCheckResult.UpToDate -> {
+                                availableUpdate = null
                                 Toast.makeText(context, "🎉 当前已是最新版本 (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
                             }
                             is UpdateCheckResult.Error -> {
