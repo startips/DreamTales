@@ -21,6 +21,19 @@ fun getPropOrEnv(key: String, defaultVal: String = ""): String {
         ?: defaultVal
 }
 
+val releaseKeystorePath = getPropOrEnv("RELEASE_KEYSTORE_PATH")
+val releaseKeystoreFile = releaseKeystorePath
+    .takeIf { it.isNotBlank() }
+    ?.let { file(it) }
+val hasReleaseKeystore = releaseKeystoreFile?.exists() == true
+val releaseStorePassword = getPropOrEnv("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = getPropOrEnv("RELEASE_KEY_ALIAS", "androiddebugkey")
+val releaseKeyPassword = getPropOrEnv("RELEASE_KEY_PASSWORD", releaseStorePassword)
+
+require(!hasReleaseKeystore || releaseStorePassword.isNotBlank()) {
+    "RELEASE_KEYSTORE_PATH 已配置，但缺少 RELEASE_KEYSTORE_PASSWORD"
+}
+
 android {
     namespace = "com.bedtime.dreamtales"
     compileSdk = 34
@@ -29,8 +42,8 @@ android {
         applicationId = "com.bedtime.dreamtales"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.1.0"
+        versionCode = 6
+        versionName = "2.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,10 +56,26 @@ android {
         buildConfigField("String", "DEFAULT_CPA_MODEL", "\"${getPropOrEnv("DEFAULT_CPA_MODEL", "gemini-3.5-flash-lite")}\"")
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                // 本地没有发布密钥时仍可构建，便于开发调试
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
