@@ -87,7 +87,7 @@
 您可以直接前往 Releases 页面获取最新编译好的安装包：
 
 - **GitHub Releases 页面**：[https://github.com/startips/DreamTales/releases](https://github.com/startips/DreamTales/releases)
-- **最新版 APK 直接下载**：[DreamTales-v2.0.0-debug.apk](https://github.com/startips/DreamTales/releases/download/v2.0.0/DreamTales-v2.0.0-debug.apk)
+- **最新版 APK 直接下载**：[GitHub Releases 最新版](https://github.com/startips/DreamTales/releases/latest)
 
 > 支持 Android 8.0 (API 26) 及更高版本（兼容鸿蒙 HarmonyOS、小米 HyperOS、vivo OriginOS、OPPO ColorOS 等主流系统）。
 
@@ -143,13 +143,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 项目内置了自动化 CI/CD 工作流（`.github/workflows/release.yml`）。发版流程非常简便：
 
 1. **设置 GitHub Repository Secrets**：
-   在 GitHub 仓库 **Settings ➡️ Secrets and variables ➡️ Actions** 中添加您的密钥（如 `DEFAULT_MIMO_API_KEY`、`DEFAULT_CPA_API_KEY` 等）。
+   在 GitHub 仓库 **Settings ➡️ Secrets and variables ➡️ Actions** 中添加 API 密钥（如 `DEFAULT_MIMO_API_KEY`、`DEFAULT_CPA_API_KEY` 等），以及固定发布签名所需的 `RELEASE_KEYSTORE_BASE64`、`RELEASE_KEYSTORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。
 2. **打 Tag 并推送到仓库**：
    ```bash
-   git tag v2.0.1
-   git push origin v2.0.1
+   git tag v2.1.1
+   git push origin v2.1.1
    ```
-3. GitHub Actions 将自动拉起 Ubuntu 容器，构建出最新的 APK 并自动创建 GitHub Release 发版。App 客户端将即刻感知新版本并弹窗提示更新！
+3. GitHub Actions 将构建 **正式 Release APK**（`assembleRelease`，非 debug 包）并自动创建 GitHub Release，随后把 `version.json` 同步回 `main`。客户端会优先读取 `version.json`，因此能立即感知新版本并弹窗提示更新。
 
 ---
 

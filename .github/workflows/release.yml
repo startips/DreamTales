@@ -69,3 +69,56 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync version.json
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION_NAME="${TAG_NAME#v}"
+          VERSION_CODE=$(grep -oE 'versionCode[[:space:]]*=[[:space:]]*[0-9]+' app/build.gradle.kts | head -1 | grep -oE '[0-9]+')
+          APK_PATH="release_assets/DreamTales-${TAG_NAME}.apk"
+          APK_SIZE=$(stat -c%s "$APK_PATH")
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/DreamTales-${TAG_NAME}.apk"
+          gh release view "$TAG_NAME" --json body,publishedAt > "$RUNNER_TEMP/release-meta.json"
+          RELEASE_BODY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("body",""))' "$RUNNER_TEMP/release-meta.json")
+          PUBLISHED_AT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("publishedAt",""))' "$RUNNER_TEMP/release-meta.json")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          export TAG_NAME VERSION_NAME VERSION_CODE APK_SIZE DOWNLOAD_URL RELEASE_BODY PUBLISHED_AT
+          export APK_NAME="DreamTales-${TAG_NAME}.apk"
+          python3 - <<'PY'
+          import json, os
+          tag = os.environ["TAG_NAME"]
+          version = os.environ["VERSION_NAME"]
+          code = int(os.environ["VERSION_CODE"])
+          size = int(os.environ["APK_SIZE"])
+          url = os.environ["DOWNLOAD_URL"]
+          name = os.environ["APK_NAME"]
+          data = {
+              "tag_name": tag,
+              "name": tag,
+              "versionName": version,
+              "versionCode": code,
+              "body": os.environ["RELEASE_BODY"],
+              "published_at": os.environ["PUBLISHED_AT"],
+              "downloadUrl": url,
+              "apkName": name,
+              "apkSizeBytes": size,
+              "assets": [{"name": name, "browser_download_url": url, "size": size}],
+          }
+          with open("version.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          git add version.json
+          if git diff --cached --quiet; then
+            echo "version.json already up to date"
+            exit 0
+          fi
+          git commit -m "chore(release): sync version.json for ${TAG_NAME}"
+          git push origin main
