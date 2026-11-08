@@ -90,6 +90,10 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackService?.setPlaybackMode(mode)
     }
 
+    fun setPlaybackSpeed(speed: Float) {
+        playbackService?.setPlaybackSpeed(speed)
+    }
+
     fun playNext() {
         playbackService?.playNext()
     }

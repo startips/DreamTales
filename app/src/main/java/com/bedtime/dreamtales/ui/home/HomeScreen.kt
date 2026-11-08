@@ -126,6 +126,7 @@ import com.bedtime.dreamtales.core.update.AppUpdateManager
 import com.bedtime.dreamtales.core.update.DownloadState
 import com.bedtime.dreamtales.core.update.UpdateCheckResult
 import com.bedtime.dreamtales.ui.settings.AboutDialog
+import com.bedtime.dreamtales.ui.settings.BedtimeReminderDialog
 import com.bedtime.dreamtales.ui.settings.ChildProfileDialog
 import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
@@ -152,7 +153,10 @@ fun HomeScreen(
     onTogglePlayPause: () -> Unit,
     onPlayStory: (Story, String, Boolean) -> Unit,
     pendingWidgetStoryId: Long? = null,
-    onWidgetStoryConsumed: () -> Unit = {}
+    onWidgetStoryConsumed: () -> Unit = {},
+    pendingStartTonightQueue: Boolean = false,
+    onStartTonightQueueConsumed: () -> Unit = {},
+    onStartAmbient: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -178,6 +182,9 @@ fun HomeScreen(
     }
     val childProfile by viewModel.childProfile.collectAsState()
     val sleepReport by viewModel.sleepReport.collectAsState()
+    val tonightQueue by viewModel.tonightQueue.collectAsState()
+    val continueListening by viewModel.continueListening.collectAsState()
+    val bedtimeReminder by viewModel.bedtimeReminder.collectAsState()
 
     val sortOrder by viewModel.sortOrder.collectAsState()
     val filteredAndSortedStories by viewModel.filteredAndSortedStories.collectAsState()
@@ -196,6 +203,8 @@ fun HomeScreen(
     var showChildProfileDialog by remember { mutableStateOf(false) }
     var showSleepReportDialog by remember { mutableStateOf(false) }
     var showLanShareDialog by remember { mutableStateOf(false) }
+    var showTonightQueueDialog by remember { mutableStateOf(false) }
+    var showBedtimeReminderDialog by remember { mutableStateOf(false) }
 
     // 桌面小组件一键伴读：等故事库与音色加载完成后自动点播
     LaunchedEffect(pendingWidgetStoryId, stories, defaultVoice) {
@@ -204,11 +213,21 @@ fun HomeScreen(
         val targetStory = stories.firstOrNull { it.id == targetId } ?: stories.firstOrNull()
         if (targetStory != null) {
             onWidgetStoryConsumed()
-            val wasCurrent = viewModel.playbackState.value.storyId == targetStory.id
             viewModel.onStoryClicked(targetStory, onNavigateToPlayer, autoPlay = true)
-            if (wasCurrent && !viewModel.playbackState.value.isPlaying) {
-                onTogglePlayPause()
-            }
+        }
+    }
+
+    // 晚安提醒通知里的「开始今晚故事」：等数据就绪后自动开播故事单
+    LaunchedEffect(pendingStartTonightQueue, stories, defaultVoice, tonightQueue) {
+        if (!pendingStartTonightQueue) return@LaunchedEffect
+        if (stories.isEmpty() || defaultVoice == null) return@LaunchedEffect
+        // 给故事单 Flow 一个短暂的加载窗口，避免刚启动时误判为空
+        delay(600L)
+        onStartTonightQueueConsumed()
+        if (tonightQueue.isNotEmpty()) {
+            viewModel.playTonightQueue(onNavigateToPlayer)
+        } else {
+            Toast.makeText(context, "今晚故事单还是空的，先挑几篇吧", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -448,6 +467,29 @@ fun HomeScreen(
                                     },
                                     leadingIcon = {
                                         Text("📊", fontSize = 16.sp)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("今晚故事单")
+                                            if (tonightQueue.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "${tonightQueue.size}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showTonightQueueDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Text("🌙", fontSize = 16.sp)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -822,6 +864,155 @@ fun HomeScreen(
                 }
             }
 
+            // 1.5 今晚仪式：继续听 / 今晚故事单 / 纯声景
+            item(key = "tonight_ritual_section") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val resumeItem = continueListening
+                    if (resumeItem != null) {
+                        OutlinedCard(
+                            onClick = {
+                                viewModel.continueStory(resumeItem, onNavigateToPlayer)
+                            },
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "⏯️", fontSize = 22.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "继续听《${resumeItem.story.title}》",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    LinearProgressIndicator(
+                                        progress = { resumeItem.progress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(3.dp)
+                                            .clip(CircleShape),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = "${formatSeconds((resumeItem.positionMs / 1000).toInt())} / ${formatSeconds((resumeItem.durationMs / 1000).toInt())}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "继续 ▸",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    if (tonightQueue.isNotEmpty()) {
+                        val totalMinutes = tonightQueue.sumOf { it.durationSeconds } / 60
+                        OutlinedCard(
+                            onClick = { showTonightQueueDialog = true },
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "🌙", fontSize = 22.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "今晚故事单",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${tonightQueue.size} 篇 · 约 $totalMinutes 分钟 · 按顺序播完即止",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Button(
+                                    onClick = { viewModel.playTonightQueue(onNavigateToPlayer) },
+                                    shape = CircleShape,
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                ) {
+                                    Text("开始", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedCard(
+                        onClick = onStartAmbient,
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "🌿", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "纯声景 · 不读故事",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "雨声、海浪、壁炉，适合已经睡着的宝贝",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "开始 ▸",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+
             // 2. 故事文库表头与多维排序气泡 + 本地故事快速搜索栏
             item(key = "story_header_and_sort_bar") {
                 Column(
@@ -990,6 +1181,15 @@ fun HomeScreen(
                     isCurrentPlaying = isCurrentPlaying,
                     isSynthesizing = isSynthesizing,
                     synthesisProgress = synthesisProgress,
+                    isInTonightQueue = tonightQueue.any { it.id == story.id },
+                    onToggleTonightQueue = {
+                        if (tonightQueue.any { it.id == story.id }) {
+                            viewModel.removeFromTonightQueue(story.id)
+                        } else {
+                            viewModel.addToTonightQueue(story.id)
+                            Toast.makeText(context, "已加入今晚故事单", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onCardClick = {
                         selectedStoryToRead = story
                     },
@@ -1086,6 +1286,14 @@ fun HomeScreen(
             cacheCount = cacheCount,
             childProfile = childProfile,
             sleepReport = sleepReport,
+            bedtimeReminder = bedtimeReminder,
+            onToggleBedtimeReminder = { enabled ->
+                viewModel.setBedtimeReminder(bedtimeReminder.copy(enabled = enabled))
+            },
+            onOpenBedtimeReminderTime = {
+                showSettingsDialog = false
+                showBedtimeReminderDialog = true
+            },
             onOpenExport = {
                 showSettingsDialog = false
                 showExportDialog = true
@@ -1110,6 +1318,32 @@ fun HomeScreen(
                 showLanShareDialog = true
             },
             onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    if (showBedtimeReminderDialog) {
+        BedtimeReminderDialog(
+            current = bedtimeReminder,
+            onSave = { settings ->
+                viewModel.setBedtimeReminder(settings)
+                showBedtimeReminderDialog = false
+            },
+            onDismiss = { showBedtimeReminderDialog = false }
+        )
+    }
+
+    if (showTonightQueueDialog) {
+        TonightQueueDialog(
+            stories = tonightQueue,
+            onMoveUp = { story -> viewModel.moveInTonightQueue(story.id, -1) },
+            onMoveDown = { story -> viewModel.moveInTonightQueue(story.id, 1) },
+            onRemove = { story -> viewModel.removeFromTonightQueue(story.id) },
+            onClear = { viewModel.clearTonightQueue() },
+            onStart = {
+                showTonightQueueDialog = false
+                viewModel.playTonightQueue(onNavigateToPlayer)
+            },
+            onDismiss = { showTonightQueueDialog = false }
         )
     }
 
@@ -1758,6 +1992,8 @@ private fun VerticalStoryCard(
     isCurrentPlaying: Boolean,
     isSynthesizing: Boolean,
     synthesisProgress: Int,
+    isInTonightQueue: Boolean,
+    onToggleTonightQueue: () -> Unit,
     onCardClick: () -> Unit,
     onPlayClick: () -> Unit,
     onToggleFavorite: () -> Unit
@@ -1926,7 +2162,21 @@ private fun VerticalStoryCard(
                     }
                 }
 
-                // 3. 右侧红心收藏按钮
+                // 3. 右侧今晚故事单按钮
+                IconButton(
+                    onClick = onToggleTonightQueue,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isInTonightQueue) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = if (isInTonightQueue) "从今晚故事单移除" else "加入今晚故事单",
+                        tint = if (isInTonightQueue) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // 4. 右侧红心收藏按钮
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier.size(36.dp)

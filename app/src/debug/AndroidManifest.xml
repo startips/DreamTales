@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- 仅 Debug 构建：用于 adb 验证晚安提醒通知，不会进入正式包 -->
+        <receiver
+            android:name=".debug.DebugReminderReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.bedtime.dreamtales.debug.SHOW_REMINDER" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

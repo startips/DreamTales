@@ -8,6 +8,7 @@ import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.audio.AmbientPreset
 import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderSettings
 
 class AppConfig(context: Context) {
 
@@ -163,6 +164,34 @@ class AppConfig(context: Context) {
         prefs.edit().putString(KEY_PLAYBACK_MODE, mode).apply()
     }
 
+    // ---------------- 播放速度 ----------------
+
+    fun getPlaybackSpeed(): Float {
+        return prefs.getFloat(KEY_PLAYBACK_SPEED, 1.0f).coerceIn(0.8f, 1.0f)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        prefs.edit().putFloat(KEY_PLAYBACK_SPEED, speed.coerceIn(0.8f, 1.0f)).apply()
+    }
+
+    // ---------------- 晚安提醒 ----------------
+
+    fun getBedtimeReminder(): BedtimeReminderSettings {
+        return BedtimeReminderSettings(
+            enabled = prefs.getBoolean(KEY_BEDTIME_REMINDER_ENABLED, false),
+            hour = prefs.getInt(KEY_BEDTIME_REMINDER_HOUR, 20).coerceIn(0, 23),
+            minute = prefs.getInt(KEY_BEDTIME_REMINDER_MINUTE, 30).coerceIn(0, 59)
+        )
+    }
+
+    fun setBedtimeReminder(settings: BedtimeReminderSettings) {
+        prefs.edit()
+            .putBoolean(KEY_BEDTIME_REMINDER_ENABLED, settings.enabled)
+            .putInt(KEY_BEDTIME_REMINDER_HOUR, settings.hour.coerceIn(0, 23))
+            .putInt(KEY_BEDTIME_REMINDER_MINUTE, settings.minute.coerceIn(0, 59))
+            .apply()
+    }
+
     // ---------------- 宝宝专属主角档案 ----------------
 
     fun getChildProfile(): ChildProfile {
@@ -222,6 +251,10 @@ class AppConfig(context: Context) {
         private const val PREFS_NAME = "dreamtales_secure_prefs"
         private const val KEY_THEME_MODE = "key_theme_mode"
         private const val KEY_PLAYBACK_MODE = "key_playback_mode"
+        private const val KEY_PLAYBACK_SPEED = "key_playback_speed"
+        private const val KEY_BEDTIME_REMINDER_ENABLED = "key_bedtime_reminder_enabled"
+        private const val KEY_BEDTIME_REMINDER_HOUR = "key_bedtime_reminder_hour"
+        private const val KEY_BEDTIME_REMINDER_MINUTE = "key_bedtime_reminder_minute"
         private const val KEY_GITHUB_REPO = "key_github_repo"
         private const val KEY_CHILD_NAME = "key_child_name"
         private const val KEY_CHILD_AGE = "key_child_age"

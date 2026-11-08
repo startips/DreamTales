@@ -38,9 +38,15 @@ import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.core.playback.PlaybackQueuePolicy
+import com.bedtime.dreamtales.core.playback.PlaybackResumePolicy
+import com.bedtime.dreamtales.core.playback.PlaybackSpeedPolicy
 import com.bedtime.dreamtales.data.local.entity.SleepSession
+import com.bedtime.dreamtales.data.local.entity.Story
+import com.bedtime.dreamtales.data.repository.PlaybackProgressRepository
 import com.bedtime.dreamtales.data.repository.SleepStatsRepository
 import com.bedtime.dreamtales.data.repository.StoryRepository
+import com.bedtime.dreamtales.data.repository.TonightQueueRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
 import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
 import com.google.common.util.concurrent.Futures
@@ -85,6 +91,7 @@ data class StoryPlaybackState(
     val storyContent: String = "",
     val coverImagePath: String? = null,
     val storyEmoji: String = "🌙",
+    val isAmbientOnly: Boolean = false,
     val isGeneratingCover: Boolean = false,
     val isPlaying: Boolean = false,
     val currentPositionMs: Long = 0L,
@@ -95,6 +102,7 @@ data class StoryPlaybackState(
     val currentVolume: Float = 1.0f,
     val systemVolumeRatio: Float = 1.0f,
     val currentSpeed: Float = 1.0f,
+    val basePlaybackSpeed: Float = 1.0f,
     val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
     val ambientSound: AmbientSound = AmbientSound.OFF,
     val ambientVolume: Float = 0.25f,
@@ -121,9 +129,14 @@ class StoryPlaybackService : MediaSessionService() {
     private val storyRepository by lazy { StoryRepository(applicationContext) }
     private val voiceRepository by lazy { VoiceRepository(applicationContext) }
     private val sleepStatsRepository by lazy { SleepStatsRepository(applicationContext) }
+    private val progressRepository by lazy { PlaybackProgressRepository(applicationContext) }
+    private val queueRepository by lazy { TonightQueueRepository(applicationContext) }
     private val appConfig by lazy { AppConfig.getInstance(applicationContext) }
 
     private var fadeMultiplier: Float = 1.0f
+    private var basePlaybackSpeed: Float = PlaybackSpeedPolicy.DEFAULT_SPEED
+    private var fadeSpeedMultiplier: Float = 1.0f
+    private var lastProgressSaveAt: Long = 0L
 
     // 睡前陪伴会话统计
     private var sessionStoryId: Long = 0L
@@ -308,13 +321,16 @@ class StoryPlaybackService : MediaSessionService() {
         } catch (e: Exception) {
             PlaybackMode.SEQUENTIAL
         }
-        updateState { it.copy(playbackMode = initialMode) }
+        basePlaybackSpeed = PlaybackSpeedPolicy.normalizeBaseSpeed(appConfig.getPlaybackSpeed())
+        updateState { it.copy(playbackMode = initialMode, basePlaybackSpeed = basePlaybackSpeed) }
         applyExoPlayerRepeatMode(initialMode)
+        applyPlaybackSpeed()
 
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateState { it.copy(isPlaying = isPlaying) }
                 if (isPlaying) {
+                    resetFadeIfTimerFinished()
                     acquireWakeLock()
                     startProgressTracker()
                     startOrResumePlaybackSession()
@@ -323,6 +339,7 @@ class StoryPlaybackService : MediaSessionService() {
                         if (player.mediaItemCount > 0) player.play()
                     }
                 } else {
+                    savePlaybackPosition()
                     pausePlaybackSessionAccumulation()
                     releaseWakeLock()
                     updateNotification(playbackState.value.storyTitle, isPlaying = false)
@@ -332,11 +349,13 @@ class StoryPlaybackService : MediaSessionService() {
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
-                    updateState {
-                        it.copy(
-                            totalDurationMs = max(0L, exoPlayer.duration),
-                            currentPositionMs = max(0L, exoPlayer.currentPosition)
-                        )
+                    if (!playbackState.value.isAmbientOnly) {
+                        updateState {
+                            it.copy(
+                                totalDurationMs = max(0L, exoPlayer.duration),
+                                currentPositionMs = max(0L, exoPlayer.currentPosition)
+                            )
+                        }
                     }
                 } else if (state == Player.STATE_ENDED) {
                     handlePlaybackEnded()
@@ -468,6 +487,7 @@ class StoryPlaybackService : MediaSessionService() {
             updateState { it.copy(storyContent = storyContent) }
             refreshCurrentFavoriteState(storyId)
             if (autoPlay && !exoPlayer.isPlaying) {
+                resetFadeIfTimerFinished()
                 exoPlayer.play()
             }
             if (!currentState.isTimerActive || currentState.remainingTimerSeconds <= 0) {
@@ -479,14 +499,21 @@ class StoryPlaybackService : MediaSessionService() {
 
         // 切换到另一篇故事：结算上一段陪伴会话（入睡耗时只在睡眠定时归零时记录）
         if (currentState.storyId != 0L && currentState.storyId != storyId) {
+            savePlaybackPosition()
             finalizePlaybackSession("SWITCHED")
         }
 
         fadeMultiplier = 1.0f
+        fadeSpeedMultiplier = 1.0f
         exoPlayer.volume = 1.0f
-        exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyPlaybackSpeed()
         applyAmbientVolume()
         updateVolumeState()
+        exoPlayer.repeatMode = if (currentState.playbackMode == PlaybackMode.REPEAT_ONE) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
+        }
 
         val existingCover = File(applicationContext.filesDir, "story_covers/cover_${storyId}.jpg")
             .takeIf { it.exists() && it.length() > 0 }?.absolutePath
@@ -498,7 +525,9 @@ class StoryPlaybackService : MediaSessionService() {
                 storyContent = storyContent,
                 coverImagePath = existingCover,
                 storyEmoji = "🌙",
-                currentSpeed = 1.0f,
+                isAmbientOnly = false,
+                currentSpeed = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, 1.0f),
+                basePlaybackSpeed = basePlaybackSpeed,
                 isPlaying = autoPlay,
                 currentPositionMs = 0L,
                 totalDurationMs = 0L
@@ -517,11 +546,28 @@ class StoryPlaybackService : MediaSessionService() {
         val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.seekTo(0L)
-        exoPlayer.prepare()
-        if (autoPlay) {
-            exoPlayer.play()
-        } else {
-            exoPlayer.pause()
+
+        // 读取断点进度后再 prepare，避免 autoPlay 时先从头播出一小段
+        serviceScope.launch {
+            val saved = runCatching { progressRepository.getPosition(storyId) }.getOrNull()
+            if (playbackState.value.storyId != storyId) return@launch
+            exoPlayer.prepare()
+            if (playbackState.value.storyId != storyId) return@launch
+            if (saved != null) {
+                val duration = exoPlayer.duration.takeIf { it > 0L } ?: saved.durationMs
+                if (PlaybackResumePolicy.shouldResume(saved.positionMs, duration)) {
+                    val target = PlaybackResumePolicy.clampPosition(saved.positionMs, duration)
+                    exoPlayer.seekTo(target)
+                    updateState { it.copy(currentPositionMs = target) }
+                } else {
+                    progressRepository.clear(storyId)
+                }
+            }
+            if (autoPlay) {
+                exoPlayer.play()
+            } else {
+                exoPlayer.pause()
+            }
         }
 
         // 默认自动准备 30 分钟伴读倒计时（处于挂起等待开播态）
@@ -530,6 +576,86 @@ class StoryPlaybackService : MediaSessionService() {
         }
 
         updateNotification(storyTitle, isPlaying = autoPlay)
+    }
+
+    /**
+     * 纯声景模式：不朗读故事，只播放多轨自然声，适合孩子已经睡着之后。
+     */
+    fun startAmbientOnly() {
+        val current = playbackState.value
+        if (current.isAmbientOnly && exoPlayer.isPlaying) return
+
+        if (!current.isAmbientOnly) {
+            savePlaybackPosition()
+            finalizePlaybackSession("SWITCHED")
+        }
+
+        fadeMultiplier = 1.0f
+        fadeSpeedMultiplier = 1.0f
+        exoPlayer.volume = 1.0f
+        applyPlaybackSpeed()
+        exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
+        currentStoryFavorite = false
+        mediaSession?.setCustomLayout(emptyList())
+
+        val mix = appConfig.getAmbientMix().ifEmpty {
+            mapOf(AmbientSound.RAIN.id to 0.25f)
+        }
+        applyAmbientMix(mix, persist = true)
+
+        updateState {
+            it.copy(
+                storyId = 0L,
+                storyTitle = "月眠声景",
+                storyContent = "",
+                coverImagePath = null,
+                storyEmoji = "🌿",
+                isAmbientOnly = true,
+                isPlaying = true,
+                currentPositionMs = 0L,
+                totalDurationMs = 0L,
+                basePlaybackSpeed = basePlaybackSpeed,
+                currentSpeed = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, 1.0f)
+            )
+        }
+
+        // 用一段静音循环承载前台播放服务与睡眠定时，真正的听感全部来自 ambientPlayers
+        exoPlayer.setMediaItem(MediaItem.fromUri("asset:///ambient/silence_loop.wav"))
+        exoPlayer.prepare()
+        exoPlayer.play()
+
+        if (!current.isTimerActive || current.remainingTimerSeconds <= 0) {
+            startSleepTimer(30)
+        }
+        updateNotification("月眠声景", isPlaying = true)
+    }
+
+    /**
+     * 0.8x / 0.9x / 1.0x 基础语速；最后 5 分钟渐弱会在此基础上继续减速。
+     */
+    fun setPlaybackSpeed(speed: Float) {
+        basePlaybackSpeed = PlaybackSpeedPolicy.normalizeBaseSpeed(speed)
+        appConfig.setPlaybackSpeed(basePlaybackSpeed)
+        applyPlaybackSpeed()
+    }
+
+    private fun applyPlaybackSpeed() {
+        val effective = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, fadeSpeedMultiplier)
+        exoPlayer.playbackParameters = PlaybackParameters(effective)
+        updateState { it.copy(currentSpeed = effective, basePlaybackSpeed = basePlaybackSpeed) }
+    }
+
+    private fun savePlaybackPosition() {
+        val state = playbackState.value
+        if (state.storyId == 0L || state.isAmbientOnly) return
+        if (exoPlayer.playbackState == Player.STATE_IDLE) return
+        val position = exoPlayer.currentPosition.coerceAtLeast(0L)
+        val duration = exoPlayer.duration.takeIf { it > 0L } ?: state.totalDurationMs
+        if (position <= 0L && duration <= 0L) return
+        val storyId = state.storyId
+        serviceScope.launch {
+            runCatching { progressRepository.save(storyId, position, duration) }
+        }
     }
 
     fun updateCoverImagePath(path: String?) {
@@ -544,6 +670,7 @@ class StoryPlaybackService : MediaSessionService() {
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
         } else {
+            resetFadeIfTimerFinished()
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0L)
             }
@@ -556,16 +683,34 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     fun resume() {
+        resetFadeIfTimerFinished()
         if (exoPlayer.playbackState == Player.STATE_ENDED) {
             exoPlayer.seekTo(0L)
         }
         exoPlayer.play()
     }
 
+    /**
+     * 睡眠定时把音量降到 0 后，用户再次手动播放时应恢复正常音量与基础语速，
+     * 否则会出现“播放了但完全没声音”的错觉。
+     */
+    private fun resetFadeIfTimerFinished() {
+        val state = playbackState.value
+        if (!state.isTimerActive && fadeMultiplier < 1.0f) {
+            fadeMultiplier = 1.0f
+            fadeSpeedMultiplier = 1.0f
+            exoPlayer.volume = 1.0f
+            applyPlaybackSpeed()
+            applyAmbientVolume()
+            updateVolumeState()
+        }
+    }
+
     fun seekTo(positionMs: Long) {
         val targetPos = positionMs.coerceAtLeast(0L)
         exoPlayer.seekTo(targetPos)
         updateState { it.copy(currentPositionMs = targetPos) }
+        savePlaybackPosition()
     }
 
     fun setPlaybackMode(mode: PlaybackMode) {
@@ -718,6 +863,7 @@ class StoryPlaybackService : MediaSessionService() {
 
     fun playNext() {
         val current = playbackState.value
+        if (current.isAmbientOnly) return
         if (current.playbackMode == PlaybackMode.SHUFFLE) {
             playRandomStory()
         } else {
@@ -727,6 +873,7 @@ class StoryPlaybackService : MediaSessionService() {
 
     fun playPrevious() {
         val current = playbackState.value
+        if (current.isAmbientOnly) return
         if (current.playbackMode == PlaybackMode.SHUFFLE) {
             playRandomStory()
         } else {
@@ -734,93 +881,118 @@ class StoryPlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * 如果当前故事属于「今晚故事单」，返回队列 ID 和当前下标；否则返回 null。
+     */
+    private suspend fun queueSnapshot(): Pair<List<Long>, Int>? {
+        val ids = queueRepository.getStoryIdsSync()
+        if (ids.isEmpty()) return null
+        val index = PlaybackQueuePolicy.indexOf(ids, playbackState.value.storyId)
+        return if (index >= 0) ids to index else null
+    }
+
+    private suspend fun playStoryFromLibrary(story: Story, autoPlay: Boolean): Boolean {
+        val defaultVoice = voiceRepository.getDefaultVoiceProfileSync() ?: return false
+        return try {
+            val filePath = storyRepository.getOrSynthesizeStoryAudio(story, defaultVoice)
+            storyRepository.recordStoryPlayed(story.id)
+            playStoryAudio(
+                storyId = story.id,
+                storyTitle = story.title,
+                storyContent = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
+                localFilePath = filePath,
+                autoPlay = autoPlay
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private suspend fun playQueueStoryAt(ids: List<Long>, index: Int): Boolean {
+        if (index !in ids.indices) return false
+        val story = storyRepository.getStoryById(ids[index]) ?: return false
+        return playStoryFromLibrary(story, autoPlay = true)
+    }
+
     private fun playRandomStory() {
         serviceScope.launch {
             val current = playbackState.value
-            val allStories = storyRepository.getAllStoriesSync()
-            if (allStories.isEmpty()) return@launch
-
-            val candidates = if (allStories.size > 1) {
-                allStories.filter { it.id != current.storyId }
+            val queueIds = queueRepository.getStoryIdsSync()
+            val inQueue = PlaybackQueuePolicy.indexOf(queueIds, current.storyId) >= 0
+            val candidates = if (queueIds.isNotEmpty() && inQueue) {
+                queueIds
+                    .filter { it != current.storyId }
+                    .mapNotNull { storyRepository.getStoryById(it) }
             } else {
-                allStories
-            }
-            val randomStory = candidates.random()
-            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
-            if (defaultVoice != null) {
-                try {
-                    val filePath = storyRepository.getOrSynthesizeStoryAudio(randomStory, defaultVoice)
-                    storyRepository.recordStoryPlayed(randomStory.id)
-                    playStoryAudio(
-                        storyId = randomStory.id,
-                        storyTitle = randomStory.title,
-                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(randomStory.title, randomStory.content),
-                        localFilePath = filePath,
-                        autoPlay = true
-                    )
-                } catch (e: Exception) {
-                    // ignore
+                val allStories = storyRepository.getAllStoriesSync()
+                if (allStories.size > 1) {
+                    allStories.filter { it.id != current.storyId }
+                } else {
+                    allStories
                 }
+            }
+            if (candidates.isEmpty()) return@launch
+            candidates.shuffled().forEach { story ->
+                if (playStoryFromLibrary(story, autoPlay = true)) return@launch
             }
         }
     }
 
     private fun playPreviousStoryInSequence() {
         serviceScope.launch {
+            val queue = queueSnapshot()
+            if (queue != null) {
+                val (ids, index) = queue
+                var cursor = index
+                var attempts = 0
+                while (attempts < ids.size) {
+                    val previous = PlaybackQueuePolicy.previousIndex(cursor, ids.size) ?: break
+                    if (playQueueStoryAt(ids, previous)) return@launch
+                    cursor = previous
+                    attempts++
+                }
+                stopPlaybackAtEnd()
+                return@launch
+            }
+
             val current = playbackState.value
             val allStories = storyRepository.getAllStoriesSync()
             if (allStories.isEmpty()) return@launch
 
             val currentIndex = allStories.indexOfFirst { it.id == current.storyId }
-            val prevIndex = if (currentIndex > 0) {
-                currentIndex - 1
-            } else {
-                allStories.lastIndex
-            }
+            val prevIndex = if (currentIndex > 0) currentIndex - 1 else allStories.lastIndex
             val prevStory = allStories[prevIndex]
-            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
-            if (defaultVoice != null) {
-                try {
-                    val filePath = storyRepository.getOrSynthesizeStoryAudio(prevStory, defaultVoice)
-                    storyRepository.recordStoryPlayed(prevStory.id)
-                    playStoryAudio(
-                        storyId = prevStory.id,
-                        storyTitle = prevStory.title,
-                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(prevStory.title, prevStory.content),
-                        localFilePath = filePath,
-                        autoPlay = true
-                    )
-                } catch (e: Exception) {
-                    // ignore
-                }
+            if (!playStoryFromLibrary(prevStory, autoPlay = true)) {
+                stopPlaybackAtEnd()
             }
         }
     }
 
     private fun handlePlaybackEnded() {
         val current = playbackState.value
+        if (current.storyId != 0L) {
+            serviceScope.launch { runCatching { progressRepository.clear(current.storyId) } }
+        }
+
         when (current.playbackMode) {
             PlaybackMode.REPEAT_ONE -> {
                 exoPlayer.seekTo(0)
                 exoPlayer.play()
             }
             PlaybackMode.STOP_AFTER_CURRENT -> {
-                exoPlayer.pause()
-                pauseAmbientPlayers()
-                val endPosition = maxOf(
-                    current.totalDurationMs,
-                    exoPlayer.duration,
-                    exoPlayer.currentPosition
-                )
-                updateState {
-                    it.copy(
-                        isPlaying = false,
-                        currentPositionMs = endPosition.coerceAtLeast(0L),
-                        totalDurationMs = maxOf(it.totalDurationMs, endPosition).coerceAtLeast(0L)
-                    )
+                // 从「今晚故事单」开播时，即使全局模式是播完即止，也应把故事单顺序播完；
+                // 只有最后一篇播完才停止。
+                serviceScope.launch {
+                    val queue = queueSnapshot()
+                    val hasNext = queue != null &&
+                        PlaybackQueuePolicy.nextIndex(queue.second, queue.first.size) != null
+                    if (hasNext) {
+                        playNextStoryInSequence()
+                    } else {
+                        stopPlaybackAtEnd()
+                    }
                 }
-                finalizePlaybackSession("COMPLETED")
-                updateNotification(current.storyTitle, isPlaying = false)
             }
             PlaybackMode.SHUFFLE -> {
                 if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
@@ -851,36 +1023,57 @@ class StoryPlaybackService : MediaSessionService() {
     private fun playNextStoryInSequence() {
         serviceScope.launch {
             delay(1500L) // 睡前呼吸间隔 1.5 秒
+
+            val queue = queueSnapshot()
+            if (queue != null) {
+                val (ids, index) = queue
+                var cursor = index
+                var attempts = 0
+                while (attempts < ids.size) {
+                    val next = PlaybackQueuePolicy.nextIndex(cursor, ids.size) ?: break
+                    if (playQueueStoryAt(ids, next)) return@launch
+                    cursor = next
+                    attempts++
+                }
+                stopPlaybackAtEnd()
+                return@launch
+            }
+
             val current = playbackState.value
             val allStories = storyRepository.getAllStoriesSync()
-            if (allStories.isEmpty()) return@launch
+            if (allStories.isEmpty()) {
+                stopPlaybackAtEnd()
+                return@launch
+            }
 
             val currentIndex = allStories.indexOfFirst { it.id == current.storyId }
-            val nextIndex = if (currentIndex >= 0 && currentIndex + 1 < allStories.size) {
-                currentIndex + 1
-            } else {
-                0
+            val startIndex = if (currentIndex >= 0) currentIndex else -1
+            for (offset in 1..allStories.size) {
+                val nextIndex = ((startIndex + offset) % allStories.size + allStories.size) % allStories.size
+                if (playStoryFromLibrary(allStories[nextIndex], autoPlay = true)) return@launch
             }
-            val nextStory = allStories[nextIndex]
-            val defaultVoice = voiceRepository.getDefaultVoiceProfileSync()
-            if (defaultVoice != null) {
-                try {
-                    val filePath = storyRepository.getOrSynthesizeStoryAudio(nextStory, defaultVoice)
-                    storyRepository.recordStoryPlayed(nextStory.id)
-                    playStoryAudio(
-                        storyId = nextStory.id,
-                        storyTitle = nextStory.title,
-                        storyContent = StorySpeechHelper.buildFullSpokenStoryText(nextStory.title, nextStory.content),
-                        localFilePath = filePath,
-                        autoPlay = true
-                    )
-                } catch (e: Exception) {
-                    exoPlayer.pause()
-                    pauseAmbientPlayers()
-                    updateState { it.copy(isPlaying = false) }
-                }
-            }
+            stopPlaybackAtEnd()
         }
+    }
+
+    private fun stopPlaybackAtEnd() {
+        val current = playbackState.value
+        exoPlayer.pause()
+        pauseAmbientPlayers()
+        val endPosition = maxOf(
+            current.totalDurationMs,
+            exoPlayer.duration,
+            exoPlayer.currentPosition
+        ).coerceAtLeast(0L)
+        updateState {
+            it.copy(
+                isPlaying = false,
+                currentPositionMs = endPosition,
+                totalDurationMs = maxOf(it.totalDurationMs, endPosition).coerceAtLeast(0L)
+            )
+        }
+        finalizePlaybackSession("COMPLETED")
+        updateNotification(current.storyTitle, isPlaying = false)
     }
 
     /**
@@ -897,8 +1090,9 @@ class StoryPlaybackService : MediaSessionService() {
         sessionTimerMinutes = durationMinutes
 
         fadeMultiplier = 1.0f
+        fadeSpeedMultiplier = 1.0f
         exoPlayer.volume = 1.0f
-        exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyPlaybackSpeed()
         applyAmbientVolume()
         updateVolumeState()
 
@@ -907,7 +1101,7 @@ class StoryPlaybackService : MediaSessionService() {
                 remainingTimerSeconds = totalSeconds,
                 selectedTimerMinutes = durationMinutes,
                 isTimerActive = true,
-                currentSpeed = 1.0f
+                currentSpeed = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, 1.0f)
             )
         }
 
@@ -915,7 +1109,7 @@ class StoryPlaybackService : MediaSessionService() {
             var remaining = totalSeconds
             val fadeThresholdSeconds = AppConstants.SLEEP_TIMER_FADE_START_MINUTES * 60
 
-            var currentSpeed = AppConstants.PLAYBACK_SPEED_START
+            var fadeSpeed = 1.0f
 
             while (isActive && remaining > 0) {
                 delay(1000L)
@@ -933,11 +1127,12 @@ class StoryPlaybackService : MediaSessionService() {
 
                     // 1. 每 20 秒执行一次语速步进递减
                     if (fadeTimePassed > 0 && fadeTimePassed % (AppConstants.STEP_INTERVAL_MILLIS / 1000) == 0L) {
-                        currentSpeed = max(
+                        fadeSpeed = max(
                             AppConstants.PLAYBACK_SPEED_TARGET,
-                            currentSpeed - AppConstants.PLAYBACK_SPEED_STEP
+                            fadeSpeed - AppConstants.PLAYBACK_SPEED_STEP
                         )
-                        exoPlayer.playbackParameters = PlaybackParameters(currentSpeed)
+                        fadeSpeedMultiplier = fadeSpeed
+                        applyPlaybackSpeed()
                     }
 
                     // 2. 按照对数声学衰减曲线平滑降低音量至 0.0f
@@ -952,7 +1147,7 @@ class StoryPlaybackService : MediaSessionService() {
                     updateState {
                         it.copy(
                             remainingTimerSeconds = remaining,
-                            currentSpeed = currentSpeed
+                            currentSpeed = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, fadeSpeedMultiplier)
                         )
                     }
                 } else {
@@ -986,8 +1181,9 @@ class StoryPlaybackService : MediaSessionService() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
         fadeMultiplier = 1.0f
+        fadeSpeedMultiplier = 1.0f
         exoPlayer.volume = 1.0f
-        exoPlayer.playbackParameters = PlaybackParameters(1.0f)
+        applyPlaybackSpeed()
         applyAmbientVolume()
         updateVolumeState()
         updateState {
@@ -995,7 +1191,7 @@ class StoryPlaybackService : MediaSessionService() {
                 remainingTimerSeconds = 0,
                 selectedTimerMinutes = 0,
                 isTimerActive = false,
-                currentSpeed = 1.0f
+                currentSpeed = PlaybackSpeedPolicy.effectiveSpeed(basePlaybackSpeed, 1.0f)
             )
         }
     }
@@ -1084,11 +1280,18 @@ class StoryPlaybackService : MediaSessionService() {
         progressTrackingJob = serviceScope.launch {
             while (isActive && exoPlayer.isPlaying) {
                 updateVolumeState()
-                updateState {
-                    it.copy(
-                        currentPositionMs = exoPlayer.currentPosition,
-                        totalDurationMs = max(0L, exoPlayer.duration)
-                    )
+                if (!playbackState.value.isAmbientOnly) {
+                    updateState {
+                        it.copy(
+                            currentPositionMs = exoPlayer.currentPosition,
+                            totalDurationMs = max(0L, exoPlayer.duration)
+                        )
+                    }
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressSaveAt >= 5_000L) {
+                        lastProgressSaveAt = now
+                        savePlaybackPosition()
+                    }
                 }
                 delay(100L) // 平滑且高频追踪朗读进度（100ms 毫秒级声画同步）
             }
@@ -1164,11 +1367,18 @@ class StoryPlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val isStoryNotification = playbackState.value.storyId != 0L &&
+            !playbackState.value.isAmbientOnly
+
         val mediaStyle = Notification.MediaStyle()
-            .setShowActionsInCompactView(0, 1)
+        if (isStoryNotification) {
+            mediaStyle.setShowActionsInCompactView(0, 1)
+        } else {
+            mediaStyle.setShowActionsInCompactView(0)
+        }
         mediaSession?.platformToken?.let { token -> mediaStyle.setMediaSession(token) }
 
-        val notification = Notification.Builder(this, AppConstants.PLAYBACK_NOTIFICATION_CHANNEL_ID)
+        val builder = Notification.Builder(this, AppConstants.PLAYBACK_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_moon)
             .setContentTitle("月眠 · 睡前伴读")
             .setContentText(if (title.isNotBlank()) "正在播放: $title" else "伴读已就绪")
@@ -1185,14 +1395,18 @@ class StoryPlaybackService : MediaSessionService() {
                     toggleIntent
                 ).build()
             )
-            .addAction(
+
+        if (isStoryNotification) {
+            builder.addAction(
                 Notification.Action.Builder(
                     favoriteIcon,
                     if (currentStoryFavorite) "取消收藏" else "收藏",
                     favoriteIntent
                 ).build()
             )
-            .build()
+        }
+
+        val notification = builder.build()
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1212,6 +1426,7 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        savePlaybackPosition()
         finalizePlaybackSession("SERVICE_STOP")
         super.onDestroy()
         sleepTimerJob?.cancel()

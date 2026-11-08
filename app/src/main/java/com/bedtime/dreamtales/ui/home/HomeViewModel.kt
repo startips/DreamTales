@@ -5,13 +5,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.playback.PlaybackResumePolicy
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderSettings
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
 import com.bedtime.dreamtales.data.repository.ImportResult
+import com.bedtime.dreamtales.data.repository.PlaybackProgressRepository
 import com.bedtime.dreamtales.data.repository.SleepStatsRepository
 import com.bedtime.dreamtales.data.repository.StoryRepository
+import com.bedtime.dreamtales.data.repository.TonightQueueRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
 import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackService
@@ -55,11 +60,24 @@ sealed class StoryGenerationUiState {
     data class Error(val message: String) : StoryGenerationUiState()
 }
 
+data class ContinueListeningItem(
+    val story: Story,
+    val positionMs: Long,
+    val durationMs: Long
+) {
+    val progress: Float
+        get() = if (durationMs > 0L) {
+            (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+}
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val storyRepository = StoryRepository(application)
     private val voiceRepository = VoiceRepository(application)
     private val sleepStatsRepository = SleepStatsRepository(application)
+    private val queueRepository = TonightQueueRepository(application)
+    private val progressRepository = PlaybackProgressRepository(application)
     private val appConfig = AppConfig.getInstance(application)
 
     val stories: StateFlow<List<Story>> = storyRepository.getAllStories()
@@ -84,6 +102,43 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val sleepReport: StateFlow<SleepWeeklyReport> = sleepStatsRepository.getWeeklyReportFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepWeeklyReport())
+
+    /**
+     * 今晚故事单：按队列顺序映射为故事对象，自动忽略已经删除的故事。
+     */
+    val tonightQueue: StateFlow<List<Story>> = combine(
+        storyRepository.getAllStories(),
+        queueRepository.getQueueFlow()
+    ) { stories, items ->
+        val byId = stories.associateBy { it.id }
+        items.mapNotNull { byId[it.storyId] }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * 最近一次未听完的进度，用于首页「继续听」。
+     */
+    val continueListening: StateFlow<ContinueListeningItem?> = combine(
+        storyRepository.getAllStories(),
+        progressRepository.getMostRecentFlow(),
+        StoryPlaybackService.playbackState
+    ) { stories, position, playback ->
+        if (position == null) return@combine null
+        val story = stories.firstOrNull { it.id == position.storyId } ?: return@combine null
+        if (playback.storyId == story.id && playback.isPlaying) return@combine null
+        val duration = if (position.durationMs > 0L) {
+            position.durationMs
+        } else {
+            story.durationSeconds * 1000L
+        }
+        if (PlaybackResumePolicy.shouldResume(position.positionMs, duration)) {
+            ContinueListeningItem(story, position.positionMs, duration)
+        } else {
+            null
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _bedtimeReminder = MutableStateFlow(appConfig.getBedtimeReminder())
+    val bedtimeReminder: StateFlow<BedtimeReminderSettings> = _bedtimeReminder.asStateFlow()
 
     private val _sortOrder = MutableStateFlow(StorySortOrder.FAVORITE_FIRST)
     val sortOrder: StateFlow<StorySortOrder> = _sortOrder.asStateFlow()
@@ -122,6 +177,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (voice != null) {
                 storyRepository.preCacheUpcomingStories(voice)
             }
+            if (appConfig.getBedtimeReminder().enabled) {
+                BedtimeReminderScheduler.schedule(getApplication())
+            }
             refreshCacheInfo()
         }
     }
@@ -144,6 +202,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun saveChildProfile(profile: ChildProfile) {
         appConfig.setChildProfile(profile)
         _childProfile.value = profile
+    }
+
+    // ---------------- 今晚故事单 ----------------
+
+    fun addToTonightQueue(storyId: Long) {
+        viewModelScope.launch { queueRepository.add(storyId) }
+    }
+
+    fun removeFromTonightQueue(storyId: Long) {
+        viewModelScope.launch { queueRepository.remove(storyId) }
+    }
+
+    fun moveInTonightQueue(storyId: Long, direction: Int) {
+        viewModelScope.launch { queueRepository.move(storyId, direction) }
+    }
+
+    fun clearTonightQueue() {
+        viewModelScope.launch { queueRepository.clear() }
+    }
+
+    fun playTonightQueue(onNavigateToPlayer: () -> Unit) {
+        viewModelScope.launch {
+            val firstId = queueRepository.getStoryIdsSync().firstOrNull() ?: return@launch
+            val story = storyRepository.getStoryById(firstId) ?: return@launch
+            onStoryClicked(
+                story = story,
+                onNavigateToPlayer = onNavigateToPlayer,
+                autoPlay = true,
+                preserveQueue = true
+            )
+        }
+    }
+
+    fun continueStory(item: ContinueListeningItem, onNavigateToPlayer: () -> Unit) {
+        onStoryClicked(item.story, onNavigateToPlayer, autoPlay = true)
+    }
+
+    // ---------------- 晚安提醒 ----------------
+
+    fun setBedtimeReminder(settings: BedtimeReminderSettings) {
+        appConfig.setBedtimeReminder(settings)
+        _bedtimeReminder.value = settings
+        if (settings.enabled) {
+            BedtimeReminderScheduler.schedule(getApplication())
+        } else {
+            BedtimeReminderScheduler.cancel(getApplication())
+        }
     }
 
     fun setPlaybackMode(mode: PlaybackMode) {
@@ -222,11 +327,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun onStoryClicked(
         story: Story,
         onNavigateToPlayer: () -> Unit,
-        autoPlay: Boolean = false
+        autoPlay: Boolean = false,
+        preserveQueue: Boolean = false
     ) {
         val currentPlayback = StoryPlaybackService.playbackState.value
-        // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器
-        if (currentPlayback.storyId == story.id && currentPlayback.storyTitle.isNotBlank()) {
+        // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器；
+        // 但「今晚故事单」或小组件要求自动开播且当前处于暂停时，需要继续走播放链路。
+        val needsResumeCurrent = autoPlay && !currentPlayback.isPlaying
+        if (currentPlayback.storyId == story.id &&
+            currentPlayback.storyTitle.isNotBlank() &&
+            !needsResumeCurrent
+        ) {
             onNavigateToPlayer()
             return
         }
@@ -235,6 +346,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (currentVoice == null) {
             _synthesisState.value = SynthesisUiState.Error("请先选择或录制一个专属伴读音色")
             return
+        }
+
+        // 手动点播其他故事时，清空「今晚故事单」，避免播完后又跳回队列造成困惑。
+        if (!preserveQueue) {
+            viewModelScope.launch { queueRepository.clear() }
         }
 
         // 1. 优先检查本地是否已有完整音频缓存：已有缓存零等待直接就绪播放，绝不受任何后台加载任务干扰

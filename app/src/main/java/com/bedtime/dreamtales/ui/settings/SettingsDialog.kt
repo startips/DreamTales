@@ -53,6 +53,8 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -69,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderSettings
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.local.entity.Story
 import kotlinx.coroutines.launch
@@ -82,6 +85,9 @@ fun SettingsDialog(
     cacheCount: Int,
     childProfile: ChildProfile,
     sleepReport: SleepWeeklyReport,
+    bedtimeReminder: BedtimeReminderSettings,
+    onToggleBedtimeReminder: (Boolean) -> Unit,
+    onOpenBedtimeReminderTime: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
     onClearCacheClick: () -> Unit,
@@ -203,7 +209,65 @@ fun SettingsDialog(
                     }
                 }
 
-                // 0.2 家庭局域网互传
+                // 0.2 晚安提醒
+                SettingSectionCard(title = "🌙 晚安提醒") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (bedtimeReminder.enabled) {
+                                    "每天 ${bedtimeReminder.label} 提醒"
+                                } else {
+                                    "固定时间提醒准备睡前故事"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (bedtimeReminder.enabled) {
+                                    "到点会收到一条温柔通知，不会自动播放"
+                                } else {
+                                    "开启后，月眠会在固定时间轻轻提醒你"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = bedtimeReminder.enabled,
+                            onCheckedChange = onToggleBedtimeReminder,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+                    if (bedtimeReminder.enabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onOpenBedtimeReminderTime,
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            )
+                        ) {
+                            Text(
+                                text = "修改提醒时间",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                // 0.3 家庭局域网互传
                 SettingSectionCard(title = "📡 家庭互传") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -238,7 +302,7 @@ fun SettingsDialog(
                     }
                 }
 
-                // 0.3 桌面小组件
+                // 0.4 桌面小组件
                 SettingSectionCard(title = "🧩 桌面小组件") {
                     Text(
                         text = "长按桌面空白处 → 小组件/小部件 → 全部应用 → 安卓小部件 → 月眠，添加「今夜童话」即可一键开播。",

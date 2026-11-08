@@ -11,6 +11,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -30,6 +31,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.bedtime.dreamtales.core.constants.AppConfig
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
 import com.bedtime.dreamtales.core.theme.DreamTalesTheme
 import com.bedtime.dreamtales.core.widget.WidgetProtocol
 import com.bedtime.dreamtales.service.FlipSensorManager
@@ -55,6 +57,7 @@ class MainActivity : ComponentActivity() {
     private val playerViewModel: SleepPlayerViewModel by viewModels()
     private var pendingStoryToPlay: Triple<com.bedtime.dreamtales.data.local.entity.Story, String, Boolean>? = null
     private var widgetPendingStoryId by mutableStateOf<Long?>(null)
+    private var pendingStartTonightQueue by mutableStateOf(false)
     private var appNavController: NavHostController? = null
 
     private val serviceConnection = object : ServiceConnection {
@@ -90,6 +93,7 @@ class MainActivity : ComponentActivity() {
         applyInitialWindowTheme()
 
         widgetPendingStoryId = extractWidgetStoryId(intent)
+        pendingStartTonightQueue = extractStartTonightQueue(intent)
         flipSensorManager = FlipSensorManager(this)
 
         // 请求通知权限 (Android 13+)
@@ -160,7 +164,22 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate(Screen.SleepPlayer.route)
                             },
                             pendingWidgetStoryId = widgetPendingStoryId,
-                            onWidgetStoryConsumed = { widgetPendingStoryId = null }
+                            onWidgetStoryConsumed = { widgetPendingStoryId = null },
+                            pendingStartTonightQueue = pendingStartTonightQueue,
+                            onStartTonightQueueConsumed = { pendingStartTonightQueue = false },
+                            onStartAmbient = {
+                                val service = playbackService
+                                if (service != null) {
+                                    service.startAmbientOnly()
+                                    navController.navigate(Screen.SleepPlayer.route)
+                                } else {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "播放服务正在启动，请稍后再试",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         )
                     }
 
@@ -201,6 +220,13 @@ class MainActivity : ComponentActivity() {
                 popUpTo(Screen.Home.route) { inclusive = false }
             }
         }
+        if (extractStartTonightQueue(intent)) {
+            pendingStartTonightQueue = true
+            appNavController?.navigate(Screen.Home.route) {
+                launchSingleTop = true
+                popUpTo(Screen.Home.route) { inclusive = false }
+            }
+        }
     }
 
     private fun applyInitialWindowTheme() {
@@ -230,6 +256,12 @@ class MainActivity : ComponentActivity() {
             intent.action,
             intent.getLongExtra(DreamTalesWidgetProvider.EXTRA_STORY_ID, 0L)
         )
+    }
+
+    private fun extractStartTonightQueue(intent: Intent?): Boolean {
+        if (intent == null) return false
+        return intent.action == BedtimeReminderScheduler.ACTION_START_TONIGHT_QUEUE ||
+            intent.getBooleanExtra(BedtimeReminderScheduler.EXTRA_START_TONIGHT_QUEUE, false)
     }
 
     override fun onResume() {

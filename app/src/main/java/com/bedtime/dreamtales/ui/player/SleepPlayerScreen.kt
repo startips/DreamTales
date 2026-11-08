@@ -106,10 +106,12 @@ import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.core.playback.PlaybackSpeedPolicy
 import com.bedtime.dreamtales.core.story.StoryPageSplitter
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
 import com.bedtime.dreamtales.data.local.entity.StoryPage
 import com.bedtime.dreamtales.service.FlipSensorManager
+import com.bedtime.dreamtales.service.StoryPlaybackState
 import java.io.File
 import kotlin.math.max
 
@@ -134,6 +136,7 @@ fun SleepPlayerScreen(
     var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读, 2: 📚 连环画
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
     var coverGenerationError by remember { mutableStateOf<String?>(null) }
 
     // 原生无权限相册图片选择器（免敏感权限、零打扰）
@@ -196,7 +199,7 @@ fun SleepPlayerScreen(
                 CenterAlignedTopAppBar(
                     title = {
                         Text(
-                            text = "沉浸式睡前伴读",
+                            text = if (playbackState.isAmbientOnly) "月眠声景" else "沉浸式睡前伴读",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -219,6 +222,15 @@ fun SleepPlayerScreen(
                 )
             }
         ) { innerPadding ->
+            if (playbackState.isAmbientOnly) {
+                AmbientOnlyPlayerContent(
+                    modifier = Modifier.padding(innerPadding),
+                    playbackState = playbackState,
+                    onOpenAmbient = { showAmbientSheet = true },
+                    onOpenTimer = { showTimerDialog = true },
+                    onTogglePlayPause = { viewModel.togglePlayPause() }
+                )
+            } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -564,30 +576,80 @@ fun SleepPlayerScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 连播模式切换药丸
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.clickable { viewModel.cyclePlaybackMode() }
+                    // 连播模式 + 播放速度
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.clickable { viewModel.cyclePlaybackMode() }
                         ) {
-                            Text(
-                                text = "${playbackState.playbackMode.iconEmoji} ${playbackState.playbackMode.title}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "切换 ▾",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 10.sp
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${playbackState.playbackMode.iconEmoji} ${playbackState.playbackMode.title}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "切换 ▾",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+
+                        Box {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.clickable { showSpeedMenu = true }
+                            ) {
+                                Text(
+                                    text = "${playbackState.basePlaybackSpeed}x ▾",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = showSpeedMenu,
+                                onDismissRequest = { showSpeedMenu = false }
+                            ) {
+                                PlaybackSpeedPolicy.OPTIONS.forEach { speed ->
+                                    val selected = kotlin.math.abs(speed - playbackState.basePlaybackSpeed) < 0.01f
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = when (speed) {
+                                                    0.8f -> "0.8x · 更慢"
+                                                    0.9f -> "0.9x · 稍慢"
+                                                    else -> "1.0x · 标准"
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setPlaybackSpeed(speed)
+                                            showSpeedMenu = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -656,6 +718,7 @@ fun SleepPlayerScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
                 }
+            }
             }
         }
 
@@ -734,6 +797,164 @@ fun SleepPlayerScreen(
                         }
                     }
             )
+        }
+    }
+}
+
+/**
+ * 纯声景播放界面：不显示故事正文、插图和进度，只保留声景、定时和播控。
+ */
+@Composable
+private fun AmbientOnlyPlayerContent(
+    modifier: Modifier,
+    playbackState: StoryPlaybackState,
+    onOpenAmbient: () -> Unit,
+    onOpenTimer: () -> Unit,
+    onTogglePlayPause: () -> Unit
+) {
+    val mix = playbackState.ambientMix
+    val trackText = mix.keys
+        .mapNotNull { id ->
+            AmbientMix.trackInfo(id)?.let { "${it.emoji} ${it.title}" }
+        }
+        .joinToString(" · ")
+    val timerLabel = when {
+        playbackState.isTimerActive && playbackState.remainingTimerSeconds > 0 -> {
+            val minutes = (playbackState.remainingTimerSeconds + 59) / 60
+            "⏱️ ${minutes} 分后停止"
+        }
+        else -> "⏱️ 设置定时"
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(text = "🌿", fontSize = 56.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "月眠声景",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (playbackState.isPlaying) "自然声正在轻轻流淌" else "声景已暂停",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Text(
+                    text = trackText.ifBlank { "还没有选择声景，点下方「助眠背景」添加" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                    modifier = Modifier.clickable { onOpenAmbient() }
+                ) {
+                    Text(
+                        text = "🌿 助眠背景 ▾",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = if (playbackState.isTimerActive) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (playbackState.isTimerActive) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        }
+                    ),
+                    modifier = Modifier.clickable { onOpenTimer() }
+                ) {
+                    Text(
+                        text = timerLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (playbackState.isTimerActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (playbackState.isTimerActive) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                    )
+                }
+            }
+
+            if (playbackState.isTimerActive && playbackState.remainingTimerSeconds <= 300) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "🌙 已进入最后 5 分钟，声音正在慢慢变轻",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Button(
+                onClick = onTogglePlayPause,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                shape = CircleShape,
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 0.dp),
+                contentPadding = PaddingValues(horizontal = 36.dp, vertical = 15.dp)
+            ) {
+                Icon(
+                    imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playbackState.isPlaying) "暂停声景" else "播放声景",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (playbackState.isPlaying) "暂停声景" else "继续声景",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontSize = 16.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }

@@ -40,6 +40,7 @@ class StoryRepository(private val context: Context) {
     private val voiceDao = db.voiceProfileDao()
     private val pageDao = db.storyPageDao()
     private val appConfig = AppConfig.getInstance(context)
+    private val progressRepository = PlaybackProgressRepository(context)
     private val synthesisMutex = Mutex()
 
     fun getAllStories(): Flow<List<Story>> = storyDao.getAllStories()
@@ -84,6 +85,7 @@ class StoryRepository(private val context: Context) {
     suspend fun clearAllAudioCaches(): Boolean = withContext(Dispatchers.IO) {
         try {
             cacheDao.clearAllCaches()
+            progressRepository.clearAll()
             val audioDir = File(context.filesDir, "audio_caches")
             if (audioDir.exists()) {
                 audioDir.listFiles()?.forEach { file ->

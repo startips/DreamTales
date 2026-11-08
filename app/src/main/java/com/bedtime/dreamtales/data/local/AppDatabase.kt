@@ -6,11 +6,15 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bedtime.dreamtales.data.local.dao.PlaybackPositionDao
+import com.bedtime.dreamtales.data.local.dao.QueueDao
 import com.bedtime.dreamtales.data.local.dao.SleepSessionDao
 import com.bedtime.dreamtales.data.local.dao.StoryAudioCacheDao
 import com.bedtime.dreamtales.data.local.dao.StoryDao
 import com.bedtime.dreamtales.data.local.dao.StoryPageDao
 import com.bedtime.dreamtales.data.local.dao.VoiceProfileDao
+import com.bedtime.dreamtales.data.local.entity.PlaybackPosition
+import com.bedtime.dreamtales.data.local.entity.QueueItem
 import com.bedtime.dreamtales.data.local.entity.SleepSession
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.StoryAudioCache
@@ -26,9 +30,11 @@ import kotlinx.coroutines.launch
         Story::class,
         StoryAudioCache::class,
         StoryPage::class,
-        SleepSession::class
+        SleepSession::class,
+        PlaybackPosition::class,
+        QueueItem::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +44,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun storyAudioCacheDao(): StoryAudioCacheDao
     abstract fun storyPageDao(): StoryPageDao
     abstract fun sleepSessionDao(): SleepSessionDao
+    abstract fun playbackPositionDao(): PlaybackPositionDao
+    abstract fun queueDao(): QueueDao
 
     companion object {
         @Volatile
@@ -104,6 +112,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `playback_positions` (" +
+                        "`storyId` INTEGER NOT NULL, " +
+                        "`positionMs` INTEGER NOT NULL, " +
+                        "`durationMs` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`storyId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `playback_queue` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`storyId` INTEGER NOT NULL, " +
+                        "`position` INTEGER NOT NULL, " +
+                        "`addedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_playback_queue_storyId` " +
+                        "ON `playback_queue` (`storyId`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -116,7 +148,14 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "dreamtales.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                    MIGRATION_6_7
+                )
                 .fallbackToDestructiveMigration()
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
