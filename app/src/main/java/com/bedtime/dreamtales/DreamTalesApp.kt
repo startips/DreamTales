@@ -3,6 +3,7 @@ package com.bedtime.dreamtales
 import android.app.Application
 import com.bedtime.dreamtales.data.repository.StoryRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
+import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ class DreamTalesApp : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             val storyRepo = StoryRepository(this@DreamTalesApp)
             storyRepo.ensureClassicStoriesPopulated()
+            DreamTalesWidgetProvider.refresh(this@DreamTalesApp)
             val voiceRepo = VoiceRepository(this@DreamTalesApp)
             voiceRepo.insertPresetVoiceIfEmpty()
             val defaultVoice = voiceRepo.getDefaultVoiceProfileSync()

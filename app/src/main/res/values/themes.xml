@@ -1,9 +1,18 @@
 <resources>
+    <!-- 应用内窗口默认使用深夜底色，避免深色主题启动时先闪一帧浅色 -->
     <style name="Theme.DreamTales" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/background_paper</item>
-        <item name="android:statusBarColor">@color/background_paper</item>
-        <item name="android:navigationBarColor">@color/background_paper</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:statusBarColor">@color/background_dark</item>
+        <item name="android:navigationBarColor">@color/background_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!--
+        桌面启动入口：关闭系统预览窗口，避免系统开屏颜色与用户选择的外观不一致。
+        首帧窗口底色由 MainActivity 在 setContent 前按已保存主题设置，
+        随后由同色 Compose 开屏无缝接管。
+    -->
+    <style name="Theme.DreamTales.Launch" parent="Theme.DreamTales">
+        <item name="android:windowDisablePreview">true</item>
     </style>
 </resources>

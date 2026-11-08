@@ -41,8 +41,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
@@ -102,9 +104,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.core.StorySpeechHelper
+import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.core.story.StoryPageSplitter
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
-import com.bedtime.dreamtales.service.AmbientSound
+import com.bedtime.dreamtales.data.local.entity.StoryPage
 import com.bedtime.dreamtales.service.FlipSensorManager
 import java.io.File
 import kotlin.math.max
@@ -123,9 +127,11 @@ fun SleepPlayerScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val playbackState by viewModel.playbackState.collectAsState()
+    val storyPages by viewModel.storyPages.collectAsState()
+    val storyPagesState by viewModel.storyPagesState.collectAsState()
     val isFaceDown by flipSensorManager.isFaceDown.collectAsState()
 
-    var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读歌词
+    var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读, 2: 📚 连环画
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
     var coverGenerationError by remember { mutableStateOf<String?>(null) }
@@ -285,6 +291,27 @@ fun SleepPlayerScreen(
                                 selectedBorderColor = MaterialTheme.colorScheme.primary
                             )
                         )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        FilterChip(
+                            selected = (activeTab == 2),
+                            onClick = { activeTab = 2 },
+                            label = { Text("📚 连环画", style = MaterialTheme.typography.labelSmall) },
+                            shape = CircleShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = (activeTab == 2),
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
                     }
                 }
 
@@ -292,7 +319,7 @@ fun SleepPlayerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(260.dp),
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     AnimatedContent(
@@ -326,12 +353,21 @@ fun SleepPlayerScreen(
                                     }
                                 }
                             )
-                        } else {
+                        } else if (tab == 1) {
                             StoryLyricsComponent(
                                 content = playbackState.storyContent,
                                 currentPositionMs = playbackState.currentPositionMs,
                                 totalDurationMs = playbackState.totalDurationMs,
                                 onSeekTo = { pos -> viewModel.seekTo(pos) }
+                            )
+                        } else {
+                            StoryPagesComponent(
+                                pages = storyPages,
+                                currentPositionMs = playbackState.currentPositionMs,
+                                totalDurationMs = playbackState.totalDurationMs,
+                                pagesState = storyPagesState,
+                                onGenerate = { viewModel.generateStoryPages() },
+                                onResetState = { viewModel.resetStoryPagesState() }
                             )
                         }
                     }
@@ -343,6 +379,7 @@ fun SleepPlayerScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     // 真实系统硬件音量、助眠白噪音、伴读睡眠定时（胶囊三剑客）
+                    val ambientMix = playbackState.ambientMix
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -367,14 +404,14 @@ fun SleepPlayerScreen(
                             }
                         }
 
-                        // 2. 助眠背景白噪音混音胶囊
+                        // 2. 助眠背景白噪音多轨混音胶囊
                         Surface(
                             shape = CircleShape,
-                            color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            color = if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                             else MaterialTheme.colorScheme.surfaceContainerHigh,
                             border = BorderStroke(
                                 1.dp,
-                                if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                 else MaterialTheme.colorScheme.outlineVariant
                             ),
                             modifier = Modifier.clickable { showAmbientSheet = true }
@@ -384,19 +421,26 @@ fun SleepPlayerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (playbackState.ambientSound != AmbientSound.OFF) "${playbackState.ambientSound.iconEmoji} ${playbackState.ambientSound.title}"
-                                    else "🌿 助眠背景",
+                                    text = if (ambientMix.isNotEmpty()) {
+                                        val ambientEmojis = ambientMix.keys
+                                            .mapNotNull { AmbientMix.trackInfo(it)?.emoji }
+                                            .take(2)
+                                            .joinToString("")
+                                        "$ambientEmojis ${ambientMix.size}轨"
+                                    } else {
+                                        "🌿 助眠背景"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
+                                    color = if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (playbackState.ambientSound != AmbientSound.OFF) FontWeight.Bold else FontWeight.Normal,
+                                    fontWeight = if (ambientMix.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
                                     fontSize = 12.sp
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = "▾",
                                     fontSize = 10.sp,
-                                    color = if (playbackState.ambientSound != AmbientSound.OFF) MaterialTheme.colorScheme.primary
+                                    color = if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -618,10 +662,10 @@ fun SleepPlayerScreen(
         // 助眠白噪音混音弹窗
         if (showAmbientSheet) {
             AmbientSoundDialog(
-                currentSound = playbackState.ambientSound,
-                currentVolume = playbackState.ambientVolume,
-                onSoundSelected = { sound -> viewModel.setAmbientSound(sound) },
-                onVolumeChanged = { vol -> viewModel.setAmbientVolume(vol) },
+                currentMix = playbackState.ambientMix,
+                userPresets = viewModel.getAmbientPresets(),
+                onMixChanged = { mix -> viewModel.setAmbientMix(mix) },
+                onSavePreset = { name, mix -> viewModel.saveAmbientPreset(name, mix) },
                 onDismiss = { showAmbientSheet = false }
             )
         }
@@ -690,6 +734,267 @@ fun SleepPlayerScreen(
                         }
                     }
             )
+        }
+    }
+}
+
+/**
+ * 分段多图连环画：3~4 页绘本，随音频进度自动翻页，也支持手动前后翻页。
+ */
+@Composable
+private fun StoryPagesComponent(
+    pages: List<StoryPage>,
+    currentPositionMs: Long,
+    totalDurationMs: Long,
+    pagesState: StoryPagesUiState,
+    onGenerate: () -> Unit,
+    onResetState: () -> Unit
+) {
+    val sortedPages = remember(pages) { pages.sortedBy { it.pageIndex } }
+
+    if (sortedPages.isEmpty()) {
+        val generating = pagesState as? StoryPagesUiState.Generating
+        val error = (pagesState as? StoryPagesUiState.Error)?.message
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(20.dp)
+            ) {
+                if (generating != null) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.size(38.dp),
+                        strokeWidth = 3.dp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "🪄 正在绘制连环画… ${generating.progress}%",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "正在为每一页故事绘制专属插画，请稍候",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(text = "📚", fontSize = 38.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "把故事变成连环画",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "AI 会把正文分成 3 页，并分别为每一页绘制睡前插画。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    if (error != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "⚠️ $error",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            onResetState()
+                            onGenerate()
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text("🪄 生成 3 页连环画", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    val drafts = remember(sortedPages) {
+        StoryPageSplitter.withFractions(sortedPages.map { it.text })
+    }
+    val progress = if (totalDurationMs > 0) {
+        (currentPositionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+    val audioPageIndex = StoryPageSplitter.activePageIndex(progress, drafts)
+
+    var manualIndex by remember(sortedPages) { mutableIntStateOf(audioPageIndex) }
+    LaunchedEffect(audioPageIndex) {
+        manualIndex = audioPageIndex
+    }
+    val currentIndex = manualIndex.coerceIn(0, sortedPages.lastIndex)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = currentIndex,
+            transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(220)) },
+            label = "storyPage",
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) { index ->
+            val page = sortedPages.getOrNull(index) ?: return@AnimatedContent
+            val bitmap = remember(page.imagePath) {
+                val path = page.imagePath
+                if (!path.isNullOrBlank()) {
+                    val file = File(path)
+                    if (file.exists() && file.length() > 0) {
+                        try {
+                            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+                } else null
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "连环画第 ${index + 1} 页",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text(text = "🌙", fontSize = 34.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = page.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { manualIndex = (currentIndex - 1).coerceAtLeast(0) },
+                enabled = currentIndex > 0,
+                shape = CircleShape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text("‹ 上一页", style = MaterialTheme.typography.labelSmall)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "第 ${currentIndex + 1} / ${sortedPages.size} 页",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 3.dp)
+                ) {
+                    sortedPages.indices.forEach { dotIndex ->
+                        Box(
+                            modifier = Modifier
+                                .size(if (dotIndex == currentIndex) 6.dp else 4.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (dotIndex == currentIndex) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                )
+                        )
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = { manualIndex = (currentIndex + 1).coerceAtMost(sortedPages.lastIndex) },
+                enabled = currentIndex < sortedPages.lastIndex,
+                shape = CircleShape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text("下一页 ›", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        if (pagesState is StoryPagesUiState.Error) {
+            Text(
+                text = "⚠️ ${pagesState.message}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        } else if (pagesState is StoryPagesUiState.Generating) {
+            Text(
+                text = "🪄 正在重新绘制连环画… ${pagesState.progress}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        } else {
+            OutlinedButton(
+                onClick = {
+                    onResetState()
+                    onGenerate()
+                },
+                shape = CircleShape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(top = 2.dp)
+            ) {
+                Text(
+                    "🪄 重新绘制",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

@@ -6,19 +6,29 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bedtime.dreamtales.data.local.dao.SleepSessionDao
 import com.bedtime.dreamtales.data.local.dao.StoryAudioCacheDao
 import com.bedtime.dreamtales.data.local.dao.StoryDao
+import com.bedtime.dreamtales.data.local.dao.StoryPageDao
 import com.bedtime.dreamtales.data.local.dao.VoiceProfileDao
+import com.bedtime.dreamtales.data.local.entity.SleepSession
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.StoryAudioCache
+import com.bedtime.dreamtales.data.local.entity.StoryPage
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [VoiceProfile::class, Story::class, StoryAudioCache::class],
-    version = 4,
+    entities = [
+        VoiceProfile::class,
+        Story::class,
+        StoryAudioCache::class,
+        StoryPage::class,
+        SleepSession::class
+    ],
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +36,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun voiceProfileDao(): VoiceProfileDao
     abstract fun storyDao(): StoryDao
     abstract fun storyAudioCacheDao(): StoryAudioCacheDao
+    abstract fun storyPageDao(): StoryPageDao
+    abstract fun sleepSessionDao(): SleepSessionDao
 
     companion object {
         @Volatile
@@ -53,6 +65,45 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `story_pages` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`storyId` INTEGER NOT NULL, " +
+                        "`pageIndex` INTEGER NOT NULL, " +
+                        "`text` TEXT NOT NULL, " +
+                        "`imagePath` TEXT, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_story_pages_storyId_pageIndex` " +
+                        "ON `story_pages` (`storyId`, `pageIndex`)"
+                )
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sleep_sessions` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`storyId` INTEGER NOT NULL, " +
+                        "`storyTitle` TEXT NOT NULL, " +
+                        "`startedAt` INTEGER NOT NULL, " +
+                        "`endedAt` INTEGER NOT NULL, " +
+                        "`listenedSeconds` INTEGER NOT NULL, " +
+                        "`estimatedSleepSeconds` INTEGER NOT NULL, " +
+                        "`endedBy` TEXT NOT NULL, " +
+                        "`selectedTimerMinutes` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sleep_sessions_startedAt` " +
+                        "ON `sleep_sessions` (`startedAt`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -65,7 +116,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "dreamtales.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {

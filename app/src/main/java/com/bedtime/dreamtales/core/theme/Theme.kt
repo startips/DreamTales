@@ -1,6 +1,7 @@
 package com.bedtime.dreamtales.core.theme
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -9,6 +10,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -114,15 +116,25 @@ fun DreamTalesTheme(
     val colorScheme = if (isDark) DreamTalesDarkColorScheme else DreamTalesLightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
+        // 用 SideEffect 在组合结果应用时立即同步窗口底色/系统栏，比 LaunchedEffect 少一帧延迟。
+        // 用 lastAppliedTheme 去重，避免每次重组都重新设置 Drawable。
+        val lastAppliedTheme = remember { longArrayOf(Long.MIN_VALUE) }
         SideEffect {
-            val window = (view.context as? Activity)?.window
-            if (window != null) {
-                window.statusBarColor = colorScheme.background.toArgb()
-                window.navigationBarColor = colorScheme.background.toArgb()
-                val controller = WindowCompat.getInsetsController(window, view)
-                // 浅色背景使用深色图标，深色背景使用浅色图标
-                controller.isAppearanceLightStatusBars = !isDark
-                controller.isAppearanceLightNavigationBars = !isDark
+            val backgroundArgb = colorScheme.background.toArgb()
+            val themeKey = (backgroundArgb.toLong() shl 1) or if (isDark) 1L else 0L
+            if (lastAppliedTheme[0] != themeKey) {
+                lastAppliedTheme[0] = themeKey
+                val window = (view.context as? Activity)?.window
+                if (window != null) {
+                    // 主题切换/冷启动时同步窗口底色，避免 Compose 绘制前露出浅色背景
+                    window.setBackgroundDrawable(ColorDrawable(backgroundArgb))
+                    window.statusBarColor = backgroundArgb
+                    window.navigationBarColor = backgroundArgb
+                    val controller = WindowCompat.getInsetsController(window, view)
+                    // 浅色背景使用深色图标，深色背景使用浅色图标
+                    controller.isAppearanceLightStatusBars = !isDark
+                    controller.isAppearanceLightNavigationBars = !isDark
+                }
             }
         }
     }

@@ -69,9 +69,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.BuildConfig
-import com.bedtime.dreamtales.core.theme.WarmAlertRed
+import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.local.entity.Story
-import com.bedtime.dreamtales.service.PlaybackMode
 import kotlinx.coroutines.launch
 
 /**
@@ -81,9 +81,14 @@ import kotlinx.coroutines.launch
 fun SettingsDialog(
     cacheSizeMb: Float,
     cacheCount: Int,
+    childProfile: ChildProfile,
+    sleepReport: SleepWeeklyReport,
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
     onClearCacheClick: () -> Unit,
+    onOpenChildProfile: () -> Unit,
+    onOpenSleepReport: () -> Unit,
+    onOpenLanShare: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -109,6 +114,141 @@ fun SettingsDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 0. 宝宝专属主角档案
+                SettingSectionCard(title = "👶 宝宝专属主角") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (childProfile.isActive) {
+                                    "${childProfile.displayName} · ${childProfile.ageLabel.ifBlank { "年龄未填" }}"
+                                } else {
+                                    "尚未启用宝宝主角"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (childProfile.isActive) {
+                                    "AI 会把宝宝写进每一篇新童话"
+                                } else {
+                                    "填写昵称后，生成专属主角童话"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onOpenChildProfile,
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            )
+                        ) {
+                            Text(
+                                text = if (childProfile.isActive) "编辑档案" else "设置档案",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                // 0.1 睡前陪伴周报
+                SettingSectionCard(title = "📊 睡前陪伴") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (sleepReport.hasData) {
+                                    "本周陪伴 ${sleepReport.totalListenedMinutes} 分钟 · ${sleepReport.nights} 晚"
+                                } else {
+                                    "还没有本周陪伴记录"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (sleepReport.averageSleepMinutes != null) {
+                                    "平均入睡耗时约 ${sleepReport.averageSleepMinutes} 分钟 · 连续 ${sleepReport.longestStreakDays} 天"
+                                } else {
+                                    "播放故事后自动记录聆听时长与入睡推测"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onOpenSleepReport,
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            )
+                        ) {
+                            Text("查看周报", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                // 0.2 家庭局域网互传
+                SettingSectionCard(title = "📡 家庭互传") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "故事 · 封面 · 家长音色",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "同一 Wi-Fi 下与家人设备一键互传",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onOpenLanShare,
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            )
+                        ) {
+                            Text("开始互传", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                // 0.3 桌面小组件
+                SettingSectionCard(title = "🧩 桌面小组件") {
+                    Text(
+                        text = "长按桌面空白处 → 小组件/小部件 → 全部应用 → 安卓小部件 → DreamTales，添加「今夜童话」即可一键开播。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 17.sp
+                    )
+                }
+
                 // 1. 数据备份与书单导入导出
                 SettingSectionCard(title = "📚 书单备份") {
                     Row(

@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -113,11 +114,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
-import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackState
 import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.update.AppReleaseInfo
@@ -125,11 +126,15 @@ import com.bedtime.dreamtales.core.update.AppUpdateManager
 import com.bedtime.dreamtales.core.update.DownloadState
 import com.bedtime.dreamtales.core.update.UpdateCheckResult
 import com.bedtime.dreamtales.ui.settings.AboutDialog
+import com.bedtime.dreamtales.ui.settings.ChildProfileDialog
 import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
+import com.bedtime.dreamtales.ui.settings.LanShareDialog
 import com.bedtime.dreamtales.ui.settings.SettingsDialog
+import com.bedtime.dreamtales.ui.settings.SleepReportDialog
 import com.bedtime.dreamtales.ui.update.DownloadProgressDialog
 import com.bedtime.dreamtales.ui.update.NewVersionDialog
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -145,7 +150,9 @@ fun HomeScreen(
     onNavigateToRecord: () -> Unit,
     onNavigateToPlayer: () -> Unit,
     onTogglePlayPause: () -> Unit,
-    onPlayStory: (Story, String) -> Unit
+    onPlayStory: (Story, String, Boolean) -> Unit,
+    pendingWidgetStoryId: Long? = null,
+    onWidgetStoryConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -158,6 +165,19 @@ fun HomeScreen(
     val synthesisState by viewModel.synthesisState.collectAsState()
     val generationState by viewModel.generationState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    // 主题切换提示：与主题同一帧更新，颜色跟随当前配色，不再使用黑白反转的 Snackbar
+    var themeHintText by remember { mutableStateOf("") }
+    var themeHintVisible by remember { mutableStateOf(false) }
+    var themeHintRequest by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(themeHintRequest) {
+        if (themeHintRequest > 0) {
+            delay(2200L)
+            themeHintVisible = false
+        }
+    }
+    val childProfile by viewModel.childProfile.collectAsState()
+    val sleepReport by viewModel.sleepReport.collectAsState()
 
     val sortOrder by viewModel.sortOrder.collectAsState()
     val filteredAndSortedStories by viewModel.filteredAndSortedStories.collectAsState()
@@ -173,6 +193,24 @@ fun HomeScreen(
     var showAddStoryDialog by remember { mutableStateOf(false) }
     var showTopMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var showChildProfileDialog by remember { mutableStateOf(false) }
+    var showSleepReportDialog by remember { mutableStateOf(false) }
+    var showLanShareDialog by remember { mutableStateOf(false) }
+
+    // 桌面小组件一键伴读：等故事库与音色加载完成后自动点播
+    LaunchedEffect(pendingWidgetStoryId, stories, defaultVoice) {
+        val targetId = pendingWidgetStoryId ?: return@LaunchedEffect
+        if (stories.isEmpty() || defaultVoice == null) return@LaunchedEffect
+        val targetStory = stories.firstOrNull { it.id == targetId } ?: stories.firstOrNull()
+        if (targetStory != null) {
+            onWidgetStoryConsumed()
+            val wasCurrent = viewModel.playbackState.value.storyId == targetStory.id
+            viewModel.onStoryClicked(targetStory, onNavigateToPlayer, autoPlay = true)
+            if (wasCurrent && !viewModel.playbackState.value.isPlaying) {
+                onTogglePlayPause()
+            }
+        }
+    }
 
     val updateManager = remember { AppUpdateManager(context) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
@@ -236,7 +274,7 @@ fun HomeScreen(
         if (synthesisState is SynthesisUiState.ReadyToPlay) {
             val ready = synthesisState as SynthesisUiState.ReadyToPlay
             viewModel.resetSynthesisState()
-            onPlayStory(ready.story, ready.localFilePath)
+            onPlayStory(ready.story, ready.localFilePath, ready.autoPlay)
         }
     }
 
@@ -277,6 +315,12 @@ fun HomeScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            ThemeChangeHint(
+                visible = themeHintVisible,
+                message = themeHintText
+            )
+        },
         topBar = {
             Column(
                 modifier = Modifier
@@ -314,7 +358,10 @@ fun HomeScreen(
                                     else -> "night" to "🌙 深度暖夜"
                                 }
                                 viewModel.setThemeMode(nextMode)
-                                Toast.makeText(context, "已切换至 $modeName", Toast.LENGTH_SHORT).show()
+                                // 同帧更新提示文案，颜色由当前 MaterialTheme 决定
+                                themeHintText = "已切换至 $modeName"
+                                themeHintVisible = true
+                                themeHintRequest++
                             }
                         ) {
                             Surface(
@@ -360,6 +407,36 @@ fun HomeScreen(
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("宝宝档案") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showChildProfileDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Text("👶", fontSize = 16.sp)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("陪伴周报") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showSleepReportDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Text("📊", fontSize = 16.sp)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("家庭互传") },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showLanShareDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Text("📡", fontSize = 16.sp)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -541,6 +618,33 @@ fun HomeScreen(
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))
+
+                        // 宝宝专属主角状态徽章
+                        StoryPersonalization.activeBadge(childProfile)?.let { badge ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = badge,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = "AI 专属定制",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
 
                         // 灵感快捷推荐气泡（每次推荐全新故事题材，支持“换一批”）
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -944,6 +1048,8 @@ fun HomeScreen(
         SettingsDialog(
             cacheSizeMb = cacheSizeMb,
             cacheCount = cacheCount,
+            childProfile = childProfile,
+            sleepReport = sleepReport,
             onOpenExport = {
                 showSettingsDialog = false
                 showExportDialog = true
@@ -954,6 +1060,18 @@ fun HomeScreen(
             },
             onClearCacheClick = {
                 showClearCacheConfirm = true
+            },
+            onOpenChildProfile = {
+                showSettingsDialog = false
+                showChildProfileDialog = true
+            },
+            onOpenSleepReport = {
+                showSettingsDialog = false
+                showSleepReportDialog = true
+            },
+            onOpenLanShare = {
+                showSettingsDialog = false
+                showLanShareDialog = true
             },
             onDismiss = { showSettingsDialog = false }
         )
@@ -1466,6 +1584,38 @@ fun HomeScreen(
             }
         )
     }
+
+    // 宝宝专属主角档案
+    if (showChildProfileDialog) {
+        ChildProfileDialog(
+            profile = childProfile,
+            onSave = { profile ->
+                viewModel.saveChildProfile(profile)
+                showChildProfileDialog = false
+                Toast.makeText(
+                    context,
+                    if (profile.isActive) "已开启宝宝主角：${profile.displayName}" else "宝宝主角已关闭",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { showChildProfileDialog = false }
+        )
+    }
+
+    // 睡前陪伴周报
+    if (showSleepReportDialog) {
+        SleepReportDialog(
+            report = sleepReport,
+            onDismiss = { showSleepReportDialog = false }
+        )
+    }
+
+    // 家庭局域网互传
+    if (showLanShareDialog) {
+        LanShareDialog(
+            onDismiss = { showLanShareDialog = false }
+        )
+    }
 }
 
 /**
@@ -1905,6 +2055,56 @@ private fun BottomMiniPlayer(
                         imageVector = if (playbackState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (playbackState.isPlaying) "暂停" else "播放",
                         modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 底部主题切换提示。
+ * 直接使用当前 MaterialTheme 的表面色/文字色，避免默认 Snackbar 的黑白反转配色与主题割裂。
+ * 显示状态由点击事件同帧写入，不经过协程排队，因此与界面换色同时发生。
+ */
+@Composable
+private fun ThemeChangeHint(
+    visible: Boolean,
+    message: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        AnimatedVisibility(
+            visible = visible,
+            // 入场不做淡入/位移动画，保证换色那一帧提示就已完整可见；仅保留退场动画
+            enter = EnterTransition.None,
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+        ) {
+            Surface(
+                shape = RoundedCornerShape(100.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

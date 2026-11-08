@@ -8,10 +8,12 @@ import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import com.bedtime.dreamtales.core.constants.AppConfig
+import com.bedtime.dreamtales.core.story.StoryPageSplitter
 import com.bedtime.dreamtales.data.api.ApiClient
 import com.bedtime.dreamtales.data.api.CpaChatRequest
 import com.bedtime.dreamtales.data.api.CpaMessage
 import com.bedtime.dreamtales.data.local.AppDatabase
+import com.bedtime.dreamtales.data.local.entity.StoryPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -25,6 +27,7 @@ class StoryImageRepository(private val context: Context) {
 
     private val appConfig by lazy { AppConfig.getInstance(context) }
     private val storyDao by lazy { AppDatabase.getInstance(context).storyDao() }
+    private val storyPageDao by lazy { AppDatabase.getInstance(context).storyPageDao() }
 
     /**
      * 获取指定故事已缓存的本地插画路径（如果存在）
@@ -42,11 +45,107 @@ class StoryImageRepository(private val context: Context) {
         storyTitle: String,
         storyContent: String
     ): String = withContext(Dispatchers.IO) {
-        val apiKey = appConfig.getCpaApiKey()
-        val baseUrl = appConfig.getCpaBaseUrl().trimEnd('/') + "/chat/completions"
-
         // 针对儿童睡前绘本定制温润安抚提示词，滤除一切文字干扰与刺激元素
         val prompt = "请为儿童睡前童话《$storyTitle》绘制一张高品质睡前绘本插画。画面艺术风格：柔和温润的梦幻水彩手绘风，带有安抚入眠的静谧治愈感，月夜与星光点缀，绝不要包含任何文字、字符或标题水印。画面核心主题：$storyTitle。"
+
+        val imageBytes = requestImageBytes(prompt)
+
+        // 保存到应用私有沙盒目录 filesDir/story_covers/cover_${storyId}.jpg
+        val coversDir = File(context.filesDir, "story_covers")
+        if (!coversDir.exists()) {
+            coversDir.mkdirs()
+        }
+
+        val coverFile = File(coversDir, "cover_${storyId}.jpg")
+        coverFile.writeBytes(imageBytes)
+
+        // 同步更新 Room 数据库
+        try {
+            storyDao.updateCoverImagePath(storyId, coverFile.absolutePath)
+        } catch (e: Exception) {
+            // ignore database sync error if file is successfully written
+        }
+
+        coverFile.absolutePath
+    }
+
+    /**
+     * 为同一篇故事生成 2~4 页连环画（每页一段文字 + 一张专属插画）。
+     * 采用顺序生成，便于展示进度，并在失败时保留已成功页面。
+     */
+    suspend fun generateAndSaveStoryPages(
+        storyId: Long,
+        storyTitle: String,
+        storyContent: String,
+        pageCount: Int = StoryPageSplitter.DEFAULT_PAGE_COUNT,
+        onProgress: (Int) -> Unit = {}
+    ): List<StoryPage> = withContext(Dispatchers.IO) {
+        val drafts = StoryPageSplitter.splitIntoPages(storyContent, pageCount)
+        if (drafts.isEmpty()) {
+            throw IllegalArgumentException("故事正文为空，无法生成连环画")
+        }
+
+        val pagesDir = File(context.filesDir, "story_pages")
+        if (!pagesDir.exists()) pagesDir.mkdirs()
+
+        val generationId = System.currentTimeMillis()
+        val generatedFiles = mutableListOf<File>()
+        val savedPages = mutableListOf<StoryPage>()
+        var lastError: Exception? = null
+
+        drafts.forEachIndexed { index, draft ->
+            onProgress(5 + (index * 80 / drafts.size))
+            var imagePath: String? = null
+            try {
+                val sceneText = draft.text
+                    .replace(Regex("^小朋友，我们要讲的故事是《[^》]*》。\\s*"), "")
+                    .take(180)
+                val prompt = "请为儿童睡前绘本《$storyTitle》绘制第 ${index + 1} 页插画。" +
+                    "画面艺术风格：柔和温润的梦幻水彩手绘风，安静治愈，月夜与星光点缀，绝不包含任何文字、字符或标题水印。" +
+                    "本页画面内容：$sceneText"
+                val bytes = requestImageBytes(prompt)
+                val pageFile = File(pagesDir, "story_${storyId}_page_${index}_$generationId.jpg")
+                pageFile.writeBytes(bytes)
+                generatedFiles.add(pageFile)
+                imagePath = pageFile.absolutePath
+            } catch (e: Exception) {
+                lastError = e
+            }
+            // 即使单页插图失败，也保留该页文字，避免连环画正文出现断层
+            savedPages.add(
+                StoryPage(
+                    storyId = storyId,
+                    pageIndex = index,
+                    text = draft.text,
+                    imagePath = imagePath
+                )
+            )
+        }
+
+        if (savedPages.all { it.imagePath == null }) {
+            generatedFiles.forEach { it.delete() }
+            throw RuntimeException(lastError?.message ?: "连环画生成失败，请稍后再试")
+        }
+
+        // 新版本生成成功后再清理旧页面，避免失败时丢失已有连环画
+        val keepNames = generatedFiles.map { it.name }.toSet()
+        pagesDir.listFiles()?.forEach { file ->
+            if (file.name.startsWith("story_${storyId}_page_") && file.name !in keepNames) {
+                file.delete()
+            }
+        }
+        storyPageDao.deleteForStory(storyId)
+        storyPageDao.insertAll(savedPages)
+        onProgress(100)
+        savedPages
+    }
+
+    /**
+     * 统一的绘本图片请求与 Base64 解码入口。
+     */
+    private suspend fun requestImageBytes(prompt: String): ByteArray {
+        val apiKey = appConfig.getCpaApiKey()
+        val baseUrl = appConfig.getCpaBaseUrl().trimEnd('/') + "/chat/completions"
 
         val request = CpaChatRequest(
             model = "gemini-3.1-flash-image",
@@ -103,24 +202,7 @@ class StoryImageRepository(private val context: Context) {
         if (imageBytes.isEmpty()) {
             throw RuntimeException("生成的图像数据为空")
         }
-
-        // 保存到应用私有沙盒目录 filesDir/story_covers/cover_${storyId}.jpg
-        val coversDir = File(context.filesDir, "story_covers")
-        if (!coversDir.exists()) {
-            coversDir.mkdirs()
-        }
-
-        val coverFile = File(coversDir, "cover_${storyId}.jpg")
-        coverFile.writeBytes(imageBytes)
-
-        // 同步更新 Room 数据库
-        try {
-            storyDao.updateCoverImagePath(storyId, coverFile.absolutePath)
-        } catch (e: Exception) {
-            // ignore database sync error if file is successfully written
-        }
-
-        coverFile.absolutePath
+        return imageBytes
     }
 
     /**

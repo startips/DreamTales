@@ -4,15 +4,19 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bedtime.dreamtales.core.constants.AppConfig
+import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
 import com.bedtime.dreamtales.data.repository.ImportResult
+import com.bedtime.dreamtales.data.repository.SleepStatsRepository
 import com.bedtime.dreamtales.data.repository.StoryRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
 import com.bedtime.dreamtales.service.PlaybackMode
 import com.bedtime.dreamtales.service.StoryPlaybackService
 import com.bedtime.dreamtales.service.StoryPlaybackState
+import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -25,7 +29,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class StorySortOrder(val label: String) {
-    FAVORITE_FIRST("❤️ 收藏优先"),
+    FAVORITE_FIRST("收藏优先"),
     MOST_PLAYED("🔥 最多收听"),
     NEWEST_FIRST("⏱️ 最新加入")
 }
@@ -33,7 +37,11 @@ enum class StorySortOrder(val label: String) {
 sealed class SynthesisUiState {
     object Idle : SynthesisUiState()
     data class Synthesizing(val storyId: Long, val storyTitle: String, val progress: Int) : SynthesisUiState()
-    data class ReadyToPlay(val story: Story, val localFilePath: String) : SynthesisUiState()
+    data class ReadyToPlay(
+        val story: Story,
+        val localFilePath: String,
+        val autoPlay: Boolean = false
+    ) : SynthesisUiState()
     data class Error(val message: String) : SynthesisUiState()
 }
 
@@ -51,6 +59,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val storyRepository = StoryRepository(application)
     private val voiceRepository = VoiceRepository(application)
+    private val sleepStatsRepository = SleepStatsRepository(application)
     private val appConfig = AppConfig.getInstance(application)
 
     val stories: StateFlow<List<Story>> = storyRepository.getAllStories()
@@ -69,6 +78,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _themeMode = MutableStateFlow(appConfig.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    private val _childProfile = MutableStateFlow(appConfig.getChildProfile())
+    val childProfile: StateFlow<ChildProfile> = _childProfile.asStateFlow()
+
+    val sleepReport: StateFlow<SleepWeeklyReport> = sleepStatsRepository.getWeeklyReportFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepWeeklyReport())
 
     private val _sortOrder = MutableStateFlow(StorySortOrder.FAVORITE_FIRST)
     val sortOrder: StateFlow<StorySortOrder> = _sortOrder.asStateFlow()
@@ -126,6 +141,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _themeMode.value = mode
     }
 
+    fun saveChildProfile(profile: ChildProfile) {
+        appConfig.setChildProfile(profile)
+        _childProfile.value = profile
+    }
+
     fun setPlaybackMode(mode: PlaybackMode) {
         appConfig.setPlaybackMode(mode.name)
     }
@@ -151,12 +171,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun importStoriesFromJson(jsonContent: String): ImportResult {
-        return storyRepository.importStoriesFromJson(jsonContent)
+        val result = storyRepository.importStoriesFromJson(jsonContent)
+        DreamTalesWidgetProvider.refresh(getApplication())
+        return result
     }
 
     fun toggleFavorite(story: Story) {
         viewModelScope.launch {
             storyRepository.setFavorite(story.id, !story.isFavorite)
+            DreamTalesWidgetProvider.refresh(getApplication())
         }
     }
 
@@ -174,6 +197,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 targetAge = targetAge,
                 iconEmoji = iconEmoji
             )
+            DreamTalesWidgetProvider.refresh(getApplication())
             onSuccess(story)
         }
     }
@@ -195,7 +219,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var activeSynthesisJob: Job? = null
     private var userRequestedPlayStoryId: Long? = null
 
-    fun onStoryClicked(story: Story, onNavigateToPlayer: () -> Unit) {
+    fun onStoryClicked(
+        story: Story,
+        onNavigateToPlayer: () -> Unit,
+        autoPlay: Boolean = false
+    ) {
         val currentPlayback = StoryPlaybackService.playbackState.value
         // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器
         if (currentPlayback.storyId == story.id && currentPlayback.storyTitle.isNotBlank()) {
@@ -217,7 +245,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch {
                     storyRepository.recordStoryPlayed(story.id)
                 }
-                _synthesisState.value = SynthesisUiState.ReadyToPlay(story, file.absolutePath)
+                _synthesisState.value = SynthesisUiState.ReadyToPlay(story, file.absolutePath, autoPlay)
                 return
             }
         }
@@ -246,7 +274,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 storyRepository.recordStoryPlayed(story.id)
                 // 仅当用户依然想听这个故事时才发出 ReadyToPlay
                 if (userRequestedPlayStoryId == story.id) {
-                    _synthesisState.value = SynthesisUiState.ReadyToPlay(story, filePath)
+                    _synthesisState.value = SynthesisUiState.ReadyToPlay(story, filePath, autoPlay)
                 }
             } catch (e: CancellationException) {
                 // 任务被用户切换取消，安全退出
@@ -353,6 +381,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val savedStory = storyRepository.saveStoryToLibrary(draft)
+                DreamTalesWidgetProvider.refresh(getApplication())
                 _generationState.value = StoryGenerationUiState.Success(savedStory)
             } catch (e: Exception) {
                 _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "收录故事失败"))

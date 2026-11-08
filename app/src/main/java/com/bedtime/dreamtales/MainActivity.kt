@@ -6,20 +6,32 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.theme.DreamTalesTheme
+import com.bedtime.dreamtales.core.widget.WidgetProtocol
 import com.bedtime.dreamtales.service.FlipSensorManager
 import com.bedtime.dreamtales.service.StoryPlaybackService
 import com.bedtime.dreamtales.ui.home.HomeScreen
@@ -30,6 +42,7 @@ import com.bedtime.dreamtales.ui.player.SleepPlayerViewModel
 import com.bedtime.dreamtales.ui.record.RecordVoiceScreen
 import com.bedtime.dreamtales.ui.record.RecordVoiceViewModel
 import com.bedtime.dreamtales.ui.splash.SplashScreen
+import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
 
 class MainActivity : ComponentActivity() {
 
@@ -40,7 +53,9 @@ class MainActivity : ComponentActivity() {
     private val homeViewModel: HomeViewModel by viewModels()
     private val recordViewModel: RecordVoiceViewModel by viewModels()
     private val playerViewModel: SleepPlayerViewModel by viewModels()
-    private var pendingStoryToPlay: Pair<com.bedtime.dreamtales.data.local.entity.Story, String>? = null
+    private var pendingStoryToPlay: Triple<com.bedtime.dreamtales.data.local.entity.Story, String, Boolean>? = null
+    private var widgetPendingStoryId by mutableStateOf<Long?>(null)
+    private var appNavController: NavHostController? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -49,13 +64,13 @@ class MainActivity : ComponentActivity() {
                 playbackService = binder.getService()
                 playerViewModel.attachService(binder.getService())
                 isBound = true
-                pendingStoryToPlay?.let { (story, path) ->
+                pendingStoryToPlay?.let { (story, path, autoPlay) ->
                     playbackService?.playStoryAudio(
                         storyId = story.id,
                         storyTitle = story.title,
                         storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
                         localFilePath = path,
-                        autoPlay = false
+                        autoPlay = autoPlay
                     )
                     pendingStoryToPlay = null
                 }
@@ -71,6 +86,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 开屏前先把窗口底色切成当前主题色，避免深色主题冷启动时闪白
+        applyInitialWindowTheme()
+
+        widgetPendingStoryId = extractWidgetStoryId(intent)
         flipSensorManager = FlipSensorManager(this)
 
         // 请求通知权限 (Android 13+)
@@ -96,6 +115,7 @@ class MainActivity : ComponentActivity() {
 
             DreamTalesTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
+                appNavController = navController
 
                 NavHost(
                     navController = navController,
@@ -123,8 +143,8 @@ class MainActivity : ComponentActivity() {
                             onTogglePlayPause = {
                                 playbackService?.togglePlayPause()
                             },
-                            onPlayStory = { story, localFilePath ->
-                                // autoPlay = false：进入播放器先处于就绪待命模式，用户主动点击后再开播
+                            onPlayStory = { story, localFilePath, autoPlay ->
+                                // 普通点播进入待命模式；桌面小组件一键伴读则自动开播
                                 val currentService = playbackService
                                 if (currentService != null) {
                                     currentService.playStoryAudio(
@@ -132,13 +152,15 @@ class MainActivity : ComponentActivity() {
                                         storyTitle = story.title,
                                         storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
                                         localFilePath = localFilePath,
-                                        autoPlay = false
+                                        autoPlay = autoPlay
                                     )
                                 } else {
-                                    pendingStoryToPlay = story to localFilePath
+                                    pendingStoryToPlay = Triple(story, localFilePath, autoPlay)
                                 }
                                 navController.navigate(Screen.SleepPlayer.route)
-                            }
+                            },
+                            pendingWidgetStoryId = widgetPendingStoryId,
+                            onWidgetStoryConsumed = { widgetPendingStoryId = null }
                         )
                     }
 
@@ -166,6 +188,48 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val storyId = extractWidgetStoryId(intent)
+        if (storyId != null) {
+            widgetPendingStoryId = storyId
+            appNavController?.navigate(Screen.Home.route) {
+                launchSingleTop = true
+                popUpTo(Screen.Home.route) { inclusive = false }
+            }
+        }
+    }
+
+    private fun applyInitialWindowTheme() {
+        val mode = AppConfig.getInstance(this).getThemeMode()
+        val isDark = when (mode) {
+            "day" -> false
+            "system" -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+            else -> true
+        }
+        val background = ContextCompat.getColor(
+            this,
+            if (isDark) R.color.background_dark else R.color.background_paper
+        )
+        window.setBackgroundDrawable(ColorDrawable(background))
+        window.statusBarColor = background
+        window.navigationBarColor = background
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !isDark
+            isAppearanceLightNavigationBars = !isDark
+        }
+    }
+
+    private fun extractWidgetStoryId(intent: Intent?): Long? {
+        if (intent == null) return null
+        return WidgetProtocol.extractPlayStoryId(
+            intent.action,
+            intent.getLongExtra(DreamTalesWidgetProvider.EXTRA_STORY_ID, 0L)
+        )
     }
 
     override fun onResume() {

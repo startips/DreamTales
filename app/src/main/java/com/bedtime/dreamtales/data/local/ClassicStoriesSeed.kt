@@ -16,7 +16,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "经典童话 · 自信勇敢",
                 iconEmoji = "🐴",
-                playCount = 12,
+                playCount = 0,
                 createdAt = now - 1000
             ),
             Story(
@@ -28,7 +28,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "经典寓言 · 温暖相聚",
                 iconEmoji = "🐸",
-                playCount = 10,
+                playCount = 0,
                 createdAt = now - 2000
             ),
             Story(
@@ -40,7 +40,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "经典童话 · 互助安乐",
                 iconEmoji = "🥕",
-                playCount = 8,
+                playCount = 0,
                 createdAt = now - 3000
             ),
             Story(
@@ -52,7 +52,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "经典童话 · 安全踏实",
                 iconEmoji = "🏡",
-                playCount = 6,
+                playCount = 0,
                 createdAt = now - 4000
             ),
             Story(
@@ -64,7 +64,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "安徒生童话 · 浪漫安睡",
                 iconEmoji = "🌸",
-                playCount = 5,
+                playCount = 0,
                 createdAt = now - 5000
             ),
             Story(
@@ -76,7 +76,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "安徒生童话 · 治愈安宁",
                 iconEmoji = "🦢",
-                playCount = 4,
+                playCount = 0,
                 createdAt = now - 6000
             ),
             Story(
@@ -88,7 +88,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "安徒生童话 · 极致舒适",
                 iconEmoji = "👑",
-                playCount = 3,
+                playCount = 0,
                 createdAt = now - 7000
             ),
             Story(
@@ -100,7 +100,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "睡前寓言 · 宁静夜巡",
                 iconEmoji = "🌙",
-                playCount = 2,
+                playCount = 0,
                 createdAt = now - 8000
             ),
             Story(
@@ -112,7 +112,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "传世名篇 · 诗意守护",
                 iconEmoji = "🌹",
-                playCount = 1,
+                playCount = 0,
                 createdAt = now - 9000
             ),
             Story(
@@ -124,7 +124,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "安徒生童话 · 纯净心灵",
                 iconEmoji = "🎶",
-                playCount = 1,
+                playCount = 0,
                 createdAt = now - 10000
             ),
             Story(
@@ -136,7 +136,7 @@ object ClassicStoriesSeed {
                 isAiGenerated = false,
                 dateLabel = "王尔德童话 · 治愈温暖",
                 iconEmoji = "🕊️",
-                playCount = 1,
+                playCount = 0,
                 createdAt = now - 11000
             )
         )

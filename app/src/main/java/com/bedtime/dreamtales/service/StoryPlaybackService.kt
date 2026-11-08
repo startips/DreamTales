@@ -1,5 +1,7 @@
 package com.bedtime.dreamtales.service
 
+import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,28 +10,41 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.bedtime.dreamtales.MainActivity
+import com.bedtime.dreamtales.R
 import com.bedtime.dreamtales.core.StorySpeechHelper
+import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.data.local.entity.SleepSession
+import com.bedtime.dreamtales.data.repository.SleepStatsRepository
 import com.bedtime.dreamtales.data.repository.StoryRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
+import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,7 +71,12 @@ enum class AmbientSound(val id: String, val title: String, val iconEmoji: String
     WAVES("waves", "宁静海浪", "🌊", "ambient/ambient_waves.wav"),
     FIRE("fire", "壁炉柴火", "🔥", "ambient/ambient_fire.wav"),
     CRICKETS("crickets", "夏夜虫鸣", "🌾", "ambient/ambient_crickets.wav"),
-    LULLABY("lullaby", "摇篮音盒", "🎶", "ambient/ambient_lullaby.wav")
+    LULLABY("lullaby", "摇篮音盒", "🎶", "ambient/ambient_lullaby.wav");
+
+    companion object {
+        fun fromId(id: String): AmbientSound? =
+            values().firstOrNull { it.id == id && it != OFF }
+    }
 }
 
 data class StoryPlaybackState(
@@ -76,15 +96,20 @@ data class StoryPlaybackState(
     val currentSpeed: Float = 1.0f,
     val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
     val ambientSound: AmbientSound = AmbientSound.OFF,
-    val ambientVolume: Float = 0.25f
+    val ambientVolume: Float = 0.25f,
+    val ambientMix: Map<String, Float> = emptyMap()
 )
 
+@SuppressLint("UnsafeOptInUsageError")
 class StoryPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
-    private lateinit var ambientPlayer: ExoPlayer
+    private lateinit var ambientAudioAttributes: AudioAttributes
+    private val ambientPlayers = mutableMapOf<AmbientSound, ExoPlayer>()
     private var wakeLock: PowerManager.WakeLock? = null
+    private var currentStoryFavorite = false
+    private val toggleFavoriteCommand = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
 
     private val binder = PlaybackBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main)
@@ -94,13 +119,152 @@ class StoryPlaybackService : MediaSessionService() {
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val storyRepository by lazy { StoryRepository(applicationContext) }
     private val voiceRepository by lazy { VoiceRepository(applicationContext) }
+    private val sleepStatsRepository by lazy { SleepStatsRepository(applicationContext) }
     private val appConfig by lazy { AppConfig.getInstance(applicationContext) }
 
     private var fadeMultiplier: Float = 1.0f
 
+    // 睡前陪伴会话统计
+    private var sessionStoryId: Long = 0L
+    private var sessionStoryTitle: String = ""
+    private var sessionStartedAt: Long = 0L
+    private var sessionListenedMs: Long = 0L
+    private var sessionLastResumeAt: Long = 0L
+    private var sessionPausedAt: Long = 0L
+    private var sessionTimerMinutes: Int = 0
+    private var bedtimeStartedAt: Long = 0L
+
     private val volumeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateVolumeState()
+        }
+    }
+
+    private val mediaActionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_TOGGLE_PLAYBACK -> togglePlayPause()
+                ACTION_TOGGLE_FAVORITE -> toggleCurrentFavorite()
+                StoryRepository.ACTION_FAVORITE_CHANGED -> {
+                    val storyId = intent.getLongExtra(StoryRepository.EXTRA_STORY_ID, 0L)
+                    if (storyId == playbackState.value.storyId) {
+                        currentStoryFavorite = intent.getBooleanExtra(
+                            StoryRepository.EXTRA_IS_FAVORITE,
+                            false
+                        )
+                        mediaSession?.setCustomLayout(buildSessionCustomLayout())
+                        updateNotification(playbackState.value.storyTitle, exoPlayer.isPlaying)
+                    }
+                }
+            }
+        }
+    }
+
+    private val mediaSessionCallback = object : MediaSession.Callback {
+        /**
+         * 把「收藏」自定义命令开放给系统媒体控制器（锁屏/通知栏/蓝牙）。
+         * 不声明的话，部分 ROM 会直接忽略 setCustomLayout 里的自定义按钮。
+         */
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+                .buildUpon()
+                .add(toggleFavoriteCommand)
+                .build()
+            return MediaSession.ConnectionResult.accept(
+                sessionCommands,
+                MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+            )
+        }
+
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            session.setCustomLayout(controller, buildSessionCustomLayout())
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            return when (customCommand.customAction) {
+                ACTION_TOGGLE_FAVORITE -> {
+                    toggleCurrentFavorite()
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                else -> super.onCustomCommand(session, controller, customCommand, args)
+            }
+        }
+    }
+
+    /**
+     * 锁屏/通知栏媒体卡片上的收藏按钮。收藏状态变化时同步刷新图标与小组件。
+     */
+    private fun toggleCurrentFavorite() {
+        val storyId = playbackState.value.storyId
+        if (storyId == 0L) return
+        val newValue = !currentStoryFavorite
+        currentStoryFavorite = newValue
+        mediaSession?.setCustomLayout(buildSessionCustomLayout())
+        updateNotification(playbackState.value.storyTitle, exoPlayer.isPlaying)
+        serviceScope.launch {
+            runCatching {
+                storyRepository.setFavorite(storyId, newValue)
+                DreamTalesWidgetProvider.refresh(applicationContext)
+            }
+        }
+    }
+
+    private fun refreshCurrentFavoriteState(storyId: Long) {
+        if (storyId == 0L) {
+            currentStoryFavorite = false
+            mediaSession?.setCustomLayout(buildSessionCustomLayout())
+            updateNotification(playbackState.value.storyTitle, exoPlayer.isPlaying)
+            return
+        }
+        serviceScope.launch {
+            val favorite = runCatching {
+                storyRepository.getStoryById(storyId)?.isFavorite == true
+            }.getOrDefault(false)
+            currentStoryFavorite = favorite
+            mediaSession?.setCustomLayout(buildSessionCustomLayout())
+            updateNotification(playbackState.value.storyTitle, exoPlayer.isPlaying)
+        }
+    }
+
+    private fun buildSessionCustomLayout(): List<CommandButton> {
+        val heartIcon = if (currentStoryFavorite) {
+            CommandButton.ICON_HEART_FILLED
+        } else {
+            CommandButton.ICON_HEART_UNFILLED
+        }
+        return listOf(
+            CommandButton.Builder(heartIcon)
+                .setSessionCommand(toggleFavoriteCommand)
+                .setDisplayName(if (currentStoryFavorite) "取消收藏" else "收藏")
+                .build()
+        )
+    }
+
+    /**
+     * HyperOS 的锁屏媒体卡片读取的是平台 PlaybackState 里的 legacy custom actions。
+     * 把收藏命令登记到媒体通知控制器后，Media3 才会把爱心按钮写入 legacy PlaybackState。
+     */
+    private fun ensureFavoriteCommandAvailable() {
+        val session = mediaSession ?: return
+        val controller = session.mediaNotificationControllerInfo ?: return
+        val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+            .buildUpon()
+            .add(toggleFavoriteCommand)
+            .build()
+        runCatching {
+            session.setAvailableCommands(
+                controller,
+                commands,
+                MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+            )
         }
     }
 
@@ -131,17 +295,11 @@ class StoryPlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        // 3. 初始化 AmbientPlayer（双轨助眠白噪音背景音）
-        val ambientAudioAttributes = AudioAttributes.Builder()
+        // 3. 多轨助眠白噪音播放器按需惰性创建（最多 5 轨混音）
+        ambientAudioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .setUsage(C.USAGE_MEDIA)
             .build()
-
-        ambientPlayer = ExoPlayer.Builder(this)
-            .setAudioAttributes(ambientAudioAttributes, false)
-            .build().apply {
-                repeatMode = Player.REPEAT_MODE_ONE
-            }
 
         val savedModeName = appConfig.getPlaybackMode()
         val initialMode = try {
@@ -158,14 +316,16 @@ class StoryPlaybackService : MediaSessionService() {
                 if (isPlaying) {
                     acquireWakeLock()
                     startProgressTracker()
+                    startOrResumePlaybackSession()
                     updateNotification(playbackState.value.storyTitle, isPlaying = true)
-                    if (playbackState.value.ambientSound != AmbientSound.OFF && ambientPlayer.mediaItemCount > 0) {
-                        ambientPlayer.play()
+                    ambientPlayers.values.forEach { player ->
+                        if (player.mediaItemCount > 0) player.play()
                     }
                 } else {
+                    pausePlaybackSessionAccumulation()
                     releaseWakeLock()
                     updateNotification(playbackState.value.storyTitle, isPlaying = false)
-                    ambientPlayer.pause()
+                    ambientPlayers.values.forEach { it.pause() }
                 }
             }
 
@@ -193,17 +353,24 @@ class StoryPlaybackService : MediaSessionService() {
         // 4. 监听手机硬件系统音量变动
         try {
             val filter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(volumeReceiver, filter, Context.RECEIVER_EXPORTED)
-            } else {
-                registerReceiver(volumeReceiver, filter)
-            }
+            ContextCompat.registerReceiver(
+                this,
+                volumeReceiver,
+                filter,
+                ContextCompat.RECEIVER_EXPORTED
+            )
         } catch (e: Exception) {
             // ignore
         }
         updateVolumeState()
 
-        // 5. 构建 MediaSession
+        // 恢复上次保存的多轨白噪音配方
+        val savedAmbientMix = appConfig.getAmbientMix()
+        if (savedAmbientMix.isNotEmpty()) {
+            applyAmbientMix(savedAmbientMix, persist = false)
+        }
+
+        // 5. 构建 MediaSession（通过 ForwardingPlayer 暴露“上一集/下一集”，让锁屏媒体卡片显示切集按钮）
         val sessionIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -212,15 +379,65 @@ class StoryPlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        mediaSession = MediaSession.Builder(this, exoPlayer)
+        val sessionPlayer = object : ForwardingPlayer(exoPlayer) {
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands().buildUpon()
+                    .addAll(
+                        Player.COMMAND_SEEK_TO_NEXT,
+                        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                        Player.COMMAND_SEEK_TO_PREVIOUS,
+                        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+                    )
+                    .build()
+            }
+
+            override fun hasNext(): Boolean = true
+            override fun hasPrevious(): Boolean = true
+            override fun hasNextMediaItem(): Boolean = true
+            override fun hasPreviousMediaItem(): Boolean = true
+            override fun seekToNext() = playNext()
+            override fun seekToNextMediaItem() = playNext()
+            override fun seekToPrevious() = playPrevious()
+            override fun seekToPreviousMediaItem() = playPrevious()
+        }
+
+        mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(pendingIntent)
+            .setCallback(mediaSessionCallback)
+            .setCustomLayout(buildSessionCustomLayout())
             .build()
+        // 交给 MediaSessionService 管理，才能拿到媒体通知控制器并把它登记到 legacy PlaybackState
+        mediaSession?.let { addSession(it) }
+        ensureFavoriteCommandAvailable()
+
+        // 6. 监听通知栏媒体按钮（播放/暂停）
+        try {
+            val mediaFilter = IntentFilter(ACTION_TOGGLE_PLAYBACK)
+            mediaFilter.addAction(ACTION_TOGGLE_FAVORITE)
+            mediaFilter.addAction(StoryRepository.ACTION_FAVORITE_CHANGED)
+            ContextCompat.registerReceiver(
+                this,
+                mediaActionReceiver,
+                mediaFilter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (e: Exception) {
+            // ignore
+        }
 
         createNotificationChannel()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession
+    }
+
+    /**
+     * 通知栏/锁屏卡片由本服务的 updateNotification 统一管理，
+     * 这里阻止 Media3 再额外发布一条默认媒体通知。
+     */
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // no-op
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -248,6 +465,7 @@ class StoryPlaybackService : MediaSessionService() {
         val currentState = playbackState.value
         if (currentState.storyId == storyId && exoPlayer.playbackState != Player.STATE_IDLE && exoPlayer.playbackState != Player.STATE_ENDED) {
             updateState { it.copy(storyContent = storyContent) }
+            refreshCurrentFavoriteState(storyId)
             if (autoPlay && !exoPlayer.isPlaying) {
                 exoPlayer.play()
             }
@@ -256,6 +474,11 @@ class StoryPlaybackService : MediaSessionService() {
             }
             updateNotification(storyTitle, isPlaying = exoPlayer.isPlaying)
             return
+        }
+
+        // 切换到另一篇故事：结算上一段陪伴会话（入睡耗时只在睡眠定时归零时记录）
+        if (currentState.storyId != 0L && currentState.storyId != storyId) {
+            finalizePlaybackSession("SWITCHED")
         }
 
         fadeMultiplier = 1.0f
@@ -279,6 +502,7 @@ class StoryPlaybackService : MediaSessionService() {
                 totalDurationMs = 0L
             )
         }
+        refreshCurrentFavoriteState(storyId)
 
         val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
         exoPlayer.setMediaItem(mediaItem)
@@ -361,30 +585,104 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     fun setAmbientSound(ambient: AmbientSound) {
-        updateState { it.copy(ambientSound = ambient) }
         if (ambient == AmbientSound.OFF || ambient.assetName == null) {
-            ambientPlayer.stop()
-            ambientPlayer.clearMediaItems()
+            applyAmbientMix(emptyMap(), persist = true)
         } else {
-            val mediaItem = MediaItem.fromUri("asset:///${ambient.assetName}")
-            ambientPlayer.setMediaItem(mediaItem)
-            ambientPlayer.prepare()
-            applyAmbientVolume()
-            if (exoPlayer.isPlaying) {
-                ambientPlayer.play()
-            }
+            val volume = playbackState.value.ambientVolume.coerceAtLeast(0.15f)
+            applyAmbientMix(mapOf(ambient.id to volume), persist = true)
         }
     }
 
     fun setAmbientVolume(volume: Float) {
         val clamped = volume.coerceIn(0.0f, 1.0f)
+        val current = playbackState.value
+        val mix = if (current.ambientMix.size == 1) {
+            current.ambientMix.mapValues { clamped }
+        } else {
+            current.ambientMix
+        }
+        applyAmbientMix(mix, persist = true)
         updateState { it.copy(ambientVolume = clamped) }
-        applyAmbientVolume()
+    }
+
+    /**
+     * 设置任意多轨混音。传入空 Map 表示关闭背景音。
+     */
+    fun setAmbientMix(mix: Map<String, Float>) {
+        applyAmbientMix(mix, persist = true)
+    }
+
+    /**
+     * 独立调整某一轨的音量；音量低于可闻阈值时自动移除该轨。
+     */
+    fun setAmbientTrack(trackId: String, volume: Float) {
+        val mix = playbackState.value.ambientMix.toMutableMap()
+        if (volume < AmbientMix.MIN_AUDIBLE_VOLUME) {
+            mix.remove(trackId)
+        } else {
+            mix[trackId] = volume.coerceIn(0f, 1f)
+        }
+        applyAmbientMix(mix, persist = true)
+    }
+
+    private fun applyAmbientMix(mix: Map<String, Float>, persist: Boolean) {
+        val safeMix = AmbientMix.sanitize(mix)
+        val desiredSounds = safeMix.keys.mapNotNull { AmbientSound.fromId(it) }
+
+        // 停止并释放不再使用的音轨
+        ambientPlayers.keys
+            .filter { it !in desiredSounds }
+            .toList()
+            .forEach { sound ->
+                ambientPlayers.remove(sound)?.run {
+                    pause()
+                    clearMediaItems()
+                    release()
+                }
+            }
+
+        // 创建或更新当前音轨
+        desiredSounds.forEach { sound ->
+            val player = ambientPlayers.getOrPut(sound) { createAmbientPlayer() }
+            if (player.mediaItemCount == 0) {
+                player.setMediaItem(MediaItem.fromUri("asset:///${sound.assetName}"))
+                player.prepare()
+            }
+            player.volume = (safeMix[sound.id] ?: 0f) * fadeMultiplier
+            if (exoPlayer.isPlaying) {
+                player.play()
+            } else {
+                player.pause()
+            }
+        }
+
+        val first = desiredSounds.firstOrNull()
+        updateState {
+            it.copy(
+                ambientMix = safeMix,
+                ambientSound = first ?: AmbientSound.OFF,
+                ambientVolume = first?.let { sound -> safeMix[sound.id] } ?: it.ambientVolume
+            )
+        }
+        if (persist) {
+            appConfig.setAmbientMix(safeMix)
+        }
+    }
+
+    private fun createAmbientPlayer(): ExoPlayer {
+        return ExoPlayer.Builder(this)
+            .setAudioAttributes(ambientAudioAttributes, false)
+            .build().apply {
+                repeatMode = Player.REPEAT_MODE_ONE
+            }
     }
 
     private fun applyAmbientVolume() {
         val state = playbackState.value
-        ambientPlayer.volume = (state.ambientVolume * fadeMultiplier).coerceIn(0.0f, 1.0f)
+        ambientPlayers.forEach { (sound, player) ->
+            val trackVolume = state.ambientMix[sound.id] ?: 0f
+            player.volume = (trackVolume * fadeMultiplier).coerceIn(0.0f, 1.0f)
+        }
     }
 
     private fun getSystemVolumeRatio(): Float {
@@ -498,16 +796,18 @@ class StoryPlaybackService : MediaSessionService() {
             }
             PlaybackMode.STOP_AFTER_CURRENT -> {
                 exoPlayer.pause()
-                ambientPlayer.pause()
+                pauseAmbientPlayers()
                 exoPlayer.seekTo(0)
                 updateState { it.copy(isPlaying = false, currentPositionMs = 0L) }
+                finalizePlaybackSession("COMPLETED")
                 updateNotification(current.storyTitle, isPlaying = false)
             }
             PlaybackMode.SHUFFLE -> {
                 if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
                     exoPlayer.pause()
-                    ambientPlayer.pause()
+                    pauseAmbientPlayers()
                     updateState { it.copy(isPlaying = false) }
+                    finalizePlaybackSession("TIMER")
                     return
                 }
                 serviceScope.launch {
@@ -518,8 +818,9 @@ class StoryPlaybackService : MediaSessionService() {
             PlaybackMode.SEQUENTIAL -> {
                 if (current.isTimerActive && current.remainingTimerSeconds <= 0) {
                     exoPlayer.pause()
-                    ambientPlayer.pause()
+                    pauseAmbientPlayers()
                     updateState { it.copy(isPlaying = false) }
+                    finalizePlaybackSession("TIMER")
                     return
                 }
                 playNextStoryInSequence()
@@ -555,7 +856,7 @@ class StoryPlaybackService : MediaSessionService() {
                     )
                 } catch (e: Exception) {
                     exoPlayer.pause()
-                    ambientPlayer.pause()
+                    pauseAmbientPlayers()
                     updateState { it.copy(isPlaying = false) }
                 }
             }
@@ -573,6 +874,7 @@ class StoryPlaybackService : MediaSessionService() {
     fun startSleepTimer(durationMinutes: Int) {
         sleepTimerJob?.cancel()
         val totalSeconds = durationMinutes * 60
+        sessionTimerMinutes = durationMinutes
 
         fadeMultiplier = 1.0f
         exoPlayer.volume = 1.0f
@@ -643,8 +945,9 @@ class StoryPlaybackService : MediaSessionService() {
             if (remaining <= 0) {
                 fadeMultiplier = 0.0f
                 exoPlayer.pause()
-                ambientPlayer.pause()
+                pauseAmbientPlayers()
                 releaseWakeLock()
+                finalizePlaybackSession("TIMER")
                 updateVolumeState()
                 updateState {
                     it.copy(
@@ -674,6 +977,85 @@ class StoryPlaybackService : MediaSessionService() {
                 isTimerActive = false,
                 currentSpeed = 1.0f
             )
+        }
+    }
+
+    private fun pauseAmbientPlayers() {
+        ambientPlayers.values.forEach { it.pause() }
+    }
+
+    // ---------------- 睡前陪伴会话统计 ----------------
+
+    private fun startOrResumePlaybackSession() {
+        val state = playbackState.value
+        if (state.storyId == 0L) return
+        val now = System.currentTimeMillis()
+        if (sessionStartedAt == 0L) {
+            sessionStartedAt = now
+            sessionStoryId = state.storyId
+            sessionStoryTitle = state.storyTitle
+            sessionListenedMs = 0L
+            sessionTimerMinutes = state.selectedTimerMinutes
+            sessionPausedAt = 0L
+            if (bedtimeStartedAt == 0L) bedtimeStartedAt = now
+        } else if (sessionPausedAt > 0L && now - sessionPausedAt > 15 * 60 * 1000L) {
+            // 中途离开超过 15 分钟，重新开始计算这次入睡的起点
+            bedtimeStartedAt = now
+        }
+        sessionPausedAt = 0L
+        if (sessionLastResumeAt == 0L) {
+            sessionLastResumeAt = now
+            if (bedtimeStartedAt == 0L) bedtimeStartedAt = now
+        }
+    }
+
+    private fun pausePlaybackSessionAccumulation() {
+        if (sessionStartedAt == 0L || sessionLastResumeAt == 0L) return
+        val now = System.currentTimeMillis()
+        sessionListenedMs += (now - sessionLastResumeAt).coerceAtLeast(0L)
+        sessionLastResumeAt = 0L
+        sessionPausedAt = now
+    }
+
+    private fun finalizePlaybackSession(endedBy: String) {
+        if (sessionStartedAt == 0L) return
+        pausePlaybackSessionAccumulation()
+
+        val endedAt = System.currentTimeMillis()
+        val listenedSeconds = (sessionListenedMs / 1000L).toInt().coerceAtLeast(0)
+        val bedtimeStart = bedtimeStartedAt.takeIf { it > 0L } ?: sessionStartedAt
+        val estimatedSleepSeconds = if (endedBy == "TIMER") {
+            val elapsedSeconds = ((endedAt - bedtimeStart) / 1000L).toInt().coerceAtLeast(0)
+            maxOf(listenedSeconds, elapsedSeconds).coerceAtMost(12 * 60 * 60)
+        } else {
+            0
+        }
+
+        if (listenedSeconds >= 5) {
+            val session = SleepSession(
+                storyId = sessionStoryId,
+                storyTitle = sessionStoryTitle,
+                startedAt = sessionStartedAt,
+                endedAt = endedAt,
+                listenedSeconds = listenedSeconds,
+                estimatedSleepSeconds = estimatedSleepSeconds,
+                endedBy = endedBy,
+                selectedTimerMinutes = sessionTimerMinutes
+            )
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { sleepStatsRepository.recordSession(session) }
+            }
+        }
+
+        sessionStartedAt = 0L
+        sessionStoryId = 0L
+        sessionStoryTitle = ""
+        sessionListenedMs = 0L
+        sessionLastResumeAt = 0L
+        sessionPausedAt = 0L
+        sessionTimerMinutes = 0
+        if (endedBy == "TIMER") {
+            bedtimeStartedAt = 0L
         }
     }
 
@@ -737,13 +1119,59 @@ class StoryPlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(this, AppConstants.PLAYBACK_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+        val toggleIntent = PendingIntent.getBroadcast(
+            this,
+            1,
+            Intent(ACTION_TOGGLE_PLAYBACK).setPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val toggleIcon = Icon.createWithResource(
+            this,
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        )
+        val favoriteIcon = Icon.createWithResource(
+            this,
+            if (currentStoryFavorite) {
+                androidx.media3.session.R.drawable.media3_icon_heart_filled
+            } else {
+                androidx.media3.session.R.drawable.media3_icon_heart_unfilled
+            }
+        )
+        val favoriteIntent = PendingIntent.getBroadcast(
+            this,
+            2,
+            Intent(ACTION_TOGGLE_FAVORITE).setPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val mediaStyle = Notification.MediaStyle()
+            .setShowActionsInCompactView(0, 1)
+        mediaSession?.platformToken?.let { token -> mediaStyle.setMediaSession(token) }
+
+        val notification = Notification.Builder(this, AppConstants.PLAYBACK_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_moon)
             .setContentTitle("DreamTales 睡前伴读")
             .setContentText(if (title.isNotBlank()) "正在播放: $title" else "伴读已就绪")
             .setContentIntent(pendingIntent)
             .setOngoing(isPlaying)
-            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setStyle(mediaStyle)
+            .addAction(
+                Notification.Action.Builder(
+                    toggleIcon,
+                    if (isPlaying) "暂停" else "播放",
+                    toggleIntent
+                ).build()
+            )
+            .addAction(
+                Notification.Action.Builder(
+                    favoriteIcon,
+                    if (currentStoryFavorite) "取消收藏" else "收藏",
+                    favoriteIntent
+                ).build()
+            )
             .build()
 
         try {
@@ -760,9 +1188,11 @@ class StoryPlaybackService : MediaSessionService() {
         } catch (e: Exception) {
             // 防御 Android 14+ 后台启动前台服务时的权限或安全异常
         }
+        ensureFavoriteCommandAvailable()
     }
 
     override fun onDestroy() {
+        finalizePlaybackSession("SERVICE_STOP")
         super.onDestroy()
         sleepTimerJob?.cancel()
         progressTrackingJob?.cancel()
@@ -772,9 +1202,13 @@ class StoryPlaybackService : MediaSessionService() {
         } catch (e: Exception) {
             // ignore
         }
-        if (::ambientPlayer.isInitialized) {
-            ambientPlayer.release()
+        try {
+            unregisterReceiver(mediaActionReceiver)
+        } catch (e: Exception) {
+            // ignore
         }
+        ambientPlayers.values.forEach { it.release() }
+        ambientPlayers.clear()
         mediaSession?.run {
             player.release()
             release()
@@ -783,6 +1217,9 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     companion object {
+        private const val ACTION_TOGGLE_PLAYBACK = "com.bedtime.dreamtales.action.TOGGLE_PLAYBACK"
+        private const val ACTION_TOGGLE_FAVORITE = "com.bedtime.dreamtales.action.TOGGLE_FAVORITE"
+
         private val _playbackState = MutableStateFlow(StoryPlaybackState())
         val playbackState: StateFlow<StoryPlaybackState> = _playbackState.asStateFlow()
 

@@ -1,9 +1,9 @@
 <resources>
+    <!-- 系统处于深色配置时保持与默认一致的深夜窗口底色 -->
     <style name="Theme.DreamTales" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:statusBarColor">@color/background_dark</item>
         <item name="android:navigationBarColor">@color/background_dark</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

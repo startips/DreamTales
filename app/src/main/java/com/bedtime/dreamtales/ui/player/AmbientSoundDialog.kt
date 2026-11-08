@@ -1,7 +1,6 @@
 package com.bedtime.dreamtales.ui.player
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,8 +8,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -20,32 +20,47 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bedtime.dreamtales.service.AmbientSound
+import com.bedtime.dreamtales.core.audio.AmbientMix
+import com.bedtime.dreamtales.core.audio.AmbientPreset
 
 /**
- * 助眠背景白噪音混音设置弹窗
- * 支持：森林细雨、宁静海浪、壁炉柴火、夏夜虫鸣、摇篮音盒 5 种大自然双轨环境音及独立音量微调
+ * 多轨白噪音自由混音台。
+ * 支持最多 5 轨同时播放、独立音量与自定义配方保存。
  */
 @Composable
 fun AmbientSoundDialog(
-    currentSound: AmbientSound,
-    currentVolume: Float,
-    onSoundSelected: (AmbientSound) -> Unit,
-    onVolumeChanged: (Float) -> Unit,
+    currentMix: Map<String, Float>,
+    userPresets: List<AmbientPreset>,
+    onMixChanged: (Map<String, Float>) -> Unit,
+    onSavePreset: (String, Map<String, Float>) -> Boolean,
     onDismiss: () -> Unit
 ) {
+    var presetName by remember { mutableStateOf("") }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
+
+    val allPresets = remember(userPresets) {
+        AmbientMix.defaultPresets() + userPresets
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = MaterialTheme.shapes.extraLarge,
@@ -55,7 +70,7 @@ fun AmbientSoundDialog(
                 Text(text = "🌿", fontSize = 22.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "助眠背景白噪音",
+                    text = "助眠多轨混音台",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -67,108 +82,210 @@ fun AmbientSoundDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "在讲故事人声底层垫上轻微大自然声音，遮蔽卧室突兀异响，陪伴宝贝更快入眠：",
+                    text = "自由叠加大自然声音，例如 40% 森林细雨 + 20% 夏夜虫鸣 + 15% 摇篮音盒。建议总音量低于人声。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
                 )
 
-                // 白噪音音效列表
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AmbientSound.values().forEach { sound ->
-                        val isSelected = (sound == currentSound)
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(MaterialTheme.shapes.medium)
-                                .clickable { onSoundSelected(sound) },
-                            shape = MaterialTheme.shapes.medium,
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                else MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        SuggestionChip(
+                            onClick = {
+                                onMixChanged(emptyMap())
+                                savedMessage = null
+                            },
+                            label = { Text("🚫 关闭", style = MaterialTheme.typography.labelSmall) },
+                            shape = CircleShape,
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurface
                             )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { onSoundSelected(sound) },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = MaterialTheme.colorScheme.primary
-                                    )
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = sound.iconEmoji,
-                                    fontSize = 18.sp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = sound.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
+                        )
+                    }
+                    items(allPresets, key = { it.name }) { preset ->
+                        SuggestionChip(
+                            onClick = {
+                                onMixChanged(preset.mix)
+                                savedMessage = "已应用「${preset.name}」"
+                            },
+                            label = { Text("🎵 ${preset.name}", style = MaterialTheme.typography.labelSmall) },
+                            shape = CircleShape,
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                labelColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
                     }
                 }
 
-                // 独立背景音量微调滑块（仅在启用背景音时显示）
-                if (currentSound != AmbientSound.OFF) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                AmbientMix.TRACKS.forEach { track ->
+                    val volume = currentMix[track.id] ?: 0f
+                    val enabled = volume >= AmbientMix.MIN_AUDIBLE_VOLUME
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            containerColor = if (enabled) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainer
+                            }
                         ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        border = BorderStroke(
+                            1.dp,
+                            if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp)
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "背景音量",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "${(currentVolume * 100).toInt()}% (建议 15%~30%)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = track.emoji, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = track.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (enabled) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (enabled) "${(volume * 100).toInt()}%" else "关闭",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Switch(
+                                        checked = enabled,
+                                        onCheckedChange = { checked ->
+                                            val updated = currentMix.toMutableMap()
+                                            if (checked) {
+                                                updated[track.id] = 0.25f
+                                            } else {
+                                                updated.remove(track.id)
+                                            }
+                                            onMixChanged(updated)
+                                            savedMessage = null
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                }
                             }
 
-                            Slider(
-                                value = currentVolume,
-                                onValueChange = onVolumeChanged,
-                                valueRange = 0.05f..1.0f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            if (enabled) {
+                                Slider(
+                                    value = volume.coerceIn(0.05f, 1f),
+                                    onValueChange = { value ->
+                                        val updated = currentMix.toMutableMap()
+                                        updated[track.id] = value
+                                        onMixChanged(updated)
+                                        savedMessage = null
+                                    },
+                                    valueRange = 0.05f..1f,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "保存我的配方",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = presetName,
+                                onValueChange = {
+                                    presetName = it
+                                    savedMessage = null
+                                },
+                                placeholder = {
+                                    Text(
+                                        "例如：雨夜森林",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                },
+                                singleLine = true,
+                                shape = CircleShape,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                                 ),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    val success = onSavePreset(presetName, currentMix)
+                                    savedMessage = if (success) {
+                                        presetName = ""
+                                        "配方已保存到上方快捷区"
+                                    } else {
+                                        "请先开启至少一轨并填写配方名称"
+                                    }
+                                },
+                                enabled = currentMix.isNotEmpty() && presetName.isNotBlank(),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("保存", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        savedMessage?.let { message ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

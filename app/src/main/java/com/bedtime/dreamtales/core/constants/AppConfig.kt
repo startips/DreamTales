@@ -5,6 +5,9 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.bedtime.dreamtales.BuildConfig
+import com.bedtime.dreamtales.core.audio.AmbientMix
+import com.bedtime.dreamtales.core.audio.AmbientPreset
+import com.bedtime.dreamtales.core.model.ChildProfile
 
 class AppConfig(context: Context) {
 
@@ -160,6 +163,48 @@ class AppConfig(context: Context) {
         prefs.edit().putString(KEY_PLAYBACK_MODE, mode).apply()
     }
 
+    // ---------------- 宝宝专属主角档案 ----------------
+
+    fun getChildProfile(): ChildProfile {
+        return ChildProfile(
+            name = prefs.getString(KEY_CHILD_NAME, "") ?: "",
+            ageLabel = prefs.getString(KEY_CHILD_AGE, "") ?: "",
+            interests = prefs.getString(KEY_CHILD_INTERESTS, "") ?: "",
+            todayNote = prefs.getString(KEY_CHILD_TODAY_NOTE, "") ?: "",
+            isEnabled = prefs.getBoolean(KEY_CHILD_ENABLED, false)
+        )
+    }
+
+    fun setChildProfile(profile: ChildProfile) {
+        prefs.edit()
+            .putString(KEY_CHILD_NAME, profile.name)
+            .putString(KEY_CHILD_AGE, profile.ageLabel)
+            .putString(KEY_CHILD_INTERESTS, profile.interests)
+            .putString(KEY_CHILD_TODAY_NOTE, profile.todayNote)
+            .putBoolean(KEY_CHILD_ENABLED, profile.isEnabled)
+            .apply()
+    }
+
+    // ---------------- 多轨白噪音混音 ----------------
+
+    fun getAmbientMix(): Map<String, Float> {
+        return AmbientMix.decode(prefs.getString(KEY_AMBIENT_MIX, ""))
+    }
+
+    fun setAmbientMix(mix: Map<String, Float>) {
+        prefs.edit().putString(KEY_AMBIENT_MIX, AmbientMix.encode(mix)).apply()
+    }
+
+    fun getAmbientPresets(): List<AmbientPreset> {
+        return AmbientMix.decodePresets(prefs.getString(KEY_AMBIENT_PRESETS, ""))
+    }
+
+    fun setAmbientPresets(presets: List<AmbientPreset>) {
+        prefs.edit()
+            .putString(KEY_AMBIENT_PRESETS, AmbientMix.encodePresets(presets))
+            .apply()
+    }
+
     fun getGithubRepo(): String {
         val repo = prefs.getString(KEY_GITHUB_REPO, DEFAULT_GITHUB_REPO)?.trim()
         if (repo.isNullOrBlank() || repo.contains("shadowx")) {
@@ -178,6 +223,13 @@ class AppConfig(context: Context) {
         private const val KEY_THEME_MODE = "key_theme_mode"
         private const val KEY_PLAYBACK_MODE = "key_playback_mode"
         private const val KEY_GITHUB_REPO = "key_github_repo"
+        private const val KEY_CHILD_NAME = "key_child_name"
+        private const val KEY_CHILD_AGE = "key_child_age"
+        private const val KEY_CHILD_INTERESTS = "key_child_interests"
+        private const val KEY_CHILD_TODAY_NOTE = "key_child_today_note"
+        private const val KEY_CHILD_ENABLED = "key_child_enabled"
+        private const val KEY_AMBIENT_MIX = "key_ambient_mix"
+        private const val KEY_AMBIENT_PRESETS = "key_ambient_presets"
         const val DEFAULT_GITHUB_REPO = "startips/DreamTales"
         private const val KEY_MIMO_API_KEY = "key_mimo_api_key"
         private const val KEY_BAILIAN_API_KEY = "key_bailian_api_key"
