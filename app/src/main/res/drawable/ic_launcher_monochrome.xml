@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 月眠主题图标单色层：月牙与怀里的小星星 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M56,26 C42,26 31,37 31,51 C31,65 42,77 56,77 C63,77 70,74 74,69 C60,69 51,57 51,45 C51,36 56,29 64,26 C61,26 58,26 56,26 Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M56,58 C56,55 58,54 60,54 C61,56 63,56 65,56 C64,58 64,60 65,62 C63,62 61,63 60,65 C60,63 58,62 56,62 C57,60 57,59 56,58 Z" />
+</vector>

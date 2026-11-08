@@ -217,7 +217,7 @@ class LanShareServer(private val context: Context) {
     private fun defaultDeviceName(): String {
         val manufacturer = Build.MANUFACTURER.trim().replaceFirstChar { it.uppercase() }
         val model = Build.MODEL.trim()
-        return "DreamTales-$manufacturer $model".take(40)
+        return "月眠-$manufacturer $model".take(40)
     }
 }
 
@@ -254,7 +254,7 @@ class LanShareDiscovery(private val context: Context) {
                             override fun onServiceResolved(info: NsdServiceInfo) {
                                 val host = info.host?.hostAddress ?: return
                                 if (info.port <= 0) return
-                                val name = info.serviceName.ifBlank { "DreamTales" }
+                                val name = info.serviceName.ifBlank { "月眠" }
                                 if (resolvedNames.add("$name|$host|${info.port}")) {
                                     onDeviceFound(LanShareDevice(name, host, info.port))
                                 }

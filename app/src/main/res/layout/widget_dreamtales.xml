@@ -16,7 +16,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🌙 DreamTales"
+            android:text="🌙 月眠"
             android:textColor="#E8C587"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -49,7 +49,7 @@
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="打开 DreamTales 开始温柔伴读"
+        android:text="打开月眠开始温柔伴读"
         android:textColor="#B8B0A0"
         android:textSize="10sp" />
 

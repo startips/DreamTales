@@ -99,7 +99,7 @@ object ShareBundleProtocol {
 
     fun deviceLabel(deviceName: String?): String {
         val clean = deviceName?.trim().orEmpty()
-        return if (clean.isBlank()) "DreamTales 家庭设备" else clean
+        return if (clean.isBlank()) "月眠 家庭设备" else clean
     }
 
     fun encodeQueryValue(value: String): String =

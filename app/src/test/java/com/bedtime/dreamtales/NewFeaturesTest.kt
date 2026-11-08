@@ -395,7 +395,7 @@ class NewFeaturesTest {
             "http://[fe80::1]:8765/bundle",
             ShareBundleProtocol.downloadUrl("fe80::1", 8765)
         )
-        assertEquals("DreamTales 家庭设备", ShareBundleProtocol.deviceLabel("  "))
+        assertEquals("月眠 家庭设备", ShareBundleProtocol.deviceLabel("  "))
         assertEquals("客厅平板", ShareBundleProtocol.deviceLabel(" 客厅平板 "))
     }
 

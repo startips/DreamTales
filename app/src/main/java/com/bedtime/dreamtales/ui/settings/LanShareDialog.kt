@@ -163,7 +163,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = if (serving) {
-                                    "已通过 mDNS 广播，端口 $serverPort。请让另一台设备打开 DreamTales → 设置 → 家庭互传 → 接收导入。"
+                                    "已通过 mDNS 广播，端口 $serverPort。请让另一台设备打开月眠 → 设置 → 家庭互传 → 接收导入。"
                                 } else {
                                     "开启后，另一台设备可在接收列表中看到本机。分享包不包含任何 API Key 或账号信息。"
                                 },

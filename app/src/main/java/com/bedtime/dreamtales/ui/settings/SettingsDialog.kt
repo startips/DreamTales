@@ -58,7 +58,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,13 +68,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.BuildConfig
-import com.bedtime.dreamtales.core.diagnostics.DiagnosticsStore
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.local.entity.Story
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 伴读与系统设置总览弹窗
@@ -245,7 +241,7 @@ fun SettingsDialog(
                 // 0.3 桌面小组件
                 SettingSectionCard(title = "🧩 桌面小组件") {
                     Text(
-                        text = "长按桌面空白处 → 小组件/小部件 → 全部应用 → 安卓小部件 → DreamTales，添加「今夜童话」即可一键开播。",
+                        text = "长按桌面空白处 → 小组件/小部件 → 全部应用 → 安卓小部件 → 月眠，添加「今夜童话」即可一键开播。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 17.sp
@@ -655,240 +651,6 @@ fun ImportStoriesDialog(
         dismissButton = {
             OutlinedButton(onClick = onDismiss, shape = CircleShape) {
                 Text("取消", style = MaterialTheme.typography.labelLarge)
-            }
-        }
-    )
-}
-
-/**
- * 关于应用弹窗 (About DreamTales)
- */
-@Composable
-fun AboutDialog(
-    isCheckingUpdate: Boolean,
-    onCheckUpdateClick: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var isExportingDiagnostics by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "🌙", fontSize = 24.sp)
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "DreamTales 伴读",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "版本 v${BuildConfig.VERSION_NAME} · 睡前伴读特别版",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // 1. 在线升级检测卡片
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "当前版本：v${BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "支持高速在线一键升级",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
-                            )
-                        }
-
-                        Button(
-                            onClick = onCheckUpdateClick,
-                            enabled = !isCheckingUpdate,
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (isCheckingUpdate) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("检测中...", style = MaterialTheme.typography.labelSmall)
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("检查更新", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-
-                // 诊断日志导出：本地收集崩溃/ANR，用户主动分享，不自动上传
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "🩺 诊断日志",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "导出崩溃/ANR 与设备信息，便于反馈问题；不包含故事内容或 API Key。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                if (isExportingDiagnostics) return@OutlinedButton
-                                isExportingDiagnostics = true
-                                scope.launch {
-                                    try {
-                                        val file = withContext(Dispatchers.IO) {
-                                            DiagnosticsStore.exportReport(context)
-                                        }
-                                        DiagnosticsStore.shareReport(context, file)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "导出诊断日志失败：${e.message ?: "未知错误"}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } finally {
-                                        isExportingDiagnostics = false
-                                    }
-                                }
-                            },
-                            enabled = !isExportingDiagnostics,
-                            shape = CircleShape,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (isExportingDiagnostics) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                            } else {
-                                Icon(
-                                    Icons.Default.Share,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                            }
-                            Text(
-                                text = if (isExportingDiagnostics) "导出中..." else "导出",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "DreamTales 是一款专为幼儿睡前伴读打造的原生 Android 应用。深度融合声学物理衰减与温和安抚心理学，让宝贝在熟悉的温暖声音中安稳入眠。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = "✨ 核心设计亮点：",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Text(
-                    text = "• 极暗护眼工程：杜绝刺眼纯白光，支持深度暖夜与日间绘本双护眼模式。\n" +
-                            "• 翻转扣屏熄屏：手机正面朝下扣在床头，双传感器毫秒级黑屏并拦截误触，伴有轻微触觉反馈。\n" +
-                            "• 对数声学衰减：最后 5 分钟语速与音量平滑渐降，模拟妈妈越讲越困的真实心流。\n" +
-                            "• 温柔前奏导引：每篇故事开讲前轻柔道出故事名称，抚慰宝宝闭眼入睡。\n" +
-                            "• 连播模式自选：顺序连播、单曲循环、播完即止任意切换，定时器保持最高优先级。\n" +
-                            "• 绘本跟读滚动：逐句声画同步高亮滚动，支持亲子识字与跟读。\n" +
-                            "• 故事书单导入导出：标准 JSON 结构，支持自定义多选导出与微信秒传。\n" +
-                            "• 离线缓存管理：直观查看占用体积，一键清理腾出手机空间。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = "🔒 隐私守护：故事与伴读音频持久化于手机私有沙盒；家长录音样本经 HTTPS 加密传输用于即时声音复刻，不作非授权留存。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Text("关闭", style = MaterialTheme.typography.labelLarge)
             }
         }
     )

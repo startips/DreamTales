@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">DreamTales</string>
-    <string name="widget_name">DreamTales 今夜童话</string>
-    <string name="widget_description">在桌面一键播放今夜睡前童话</string>
+    <string name="app_name">月眠</string>
+    <string name="widget_name">月眠 · 今夜童话</string>
+    <string name="widget_description">在桌面一键播放月眠的今夜睡前童话</string>
 </resources>

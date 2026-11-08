@@ -113,7 +113,7 @@ class ShareBundleRepository(private val context: Context) {
             unzipSafely(bundleFile, importDir)
             val manifestFile = File(importDir, ShareBundleProtocol.MANIFEST_ENTRY)
             if (!manifestFile.exists()) {
-                throw IllegalArgumentException("共享包缺少 manifest.json，可能不是 DreamTales 分享文件")
+                throw IllegalArgumentException("共享包缺少 manifest.json，可能不是月眠分享文件")
             }
             val manifest = gson.fromJson(
                 manifestFile.readText(Charsets.UTF_8),

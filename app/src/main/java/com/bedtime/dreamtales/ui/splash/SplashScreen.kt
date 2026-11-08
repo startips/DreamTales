@@ -144,11 +144,20 @@ fun SplashScreen(
                 modifier = Modifier.alpha(contentAlpha)
             ) {
                 Text(
-                    text = "DreamTales",
+                    text = "月眠",
                     color = primaryColor,
-                    fontSize = 32.sp,
+                    fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
+                    letterSpacing = 4.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "DreamTales",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    letterSpacing = 3.sp
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))

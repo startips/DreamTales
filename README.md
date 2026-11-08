@@ -1,13 +1,13 @@
 <div align="center">
 
-# 🌙 DreamTales (绘梦童话)
+# 🌙 月眠 DreamTales
 
-**专为睡前场景打造的现代 Android 智能伴读绘本应用**
+**把月亮讲进梦里。**
 
-*让温润的声音与童话插画，温柔伴宝入梦*
+*专为睡前场景打造的现代 Android 智能伴读绘本应用*
 
 [![GitHub Release](https://img.shields.io/github/v/release/startips/DreamTales?style=flat-square&color=E8C587)](https://github.com/startips/DreamTales/releases/latest)
-[![Android Min SDK](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-brightgreen?style=flat-square)](https://android.com)
+[![Android Min SDK](https://img.shields.io/badge/Android-14%2B%20(API%2034%2B)-brightgreen?style=flat-square)](https://android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-100%25-orange?style=flat-square&logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-M3-4285F4?style=flat-square&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
@@ -20,7 +20,7 @@
 
 ## 📖 项目简介
 
-**DreamTales** 是一款专为年轻家庭睡前陪伴场景设计的现代 Android 绘本应用。不仅收录了大量精选经典安抚童话，还融合了前沿的 AI 故事创作、家长真人声音即时克隆、唯美绘本插图生成与暗光卧室物理护眼声学工程。
+**月眠（DreamTales）** 是一款专为年轻家庭睡前陪伴场景设计的现代 Android 绘本应用。不仅收录了大量精选经典安抚童话，还融合了前沿的 AI 故事创作、家长真人声音即时克隆、唯美绘本插图生成与暗光卧室物理护眼声学工程。
 
 遵循 **Local-First（本地优先）** 架构原则，所有故事文本、音频与绘本均完整持久化于本地私有沙盒中，断网也可随时秒开点播，守护宁静温馨的入眠时光。
 
@@ -89,7 +89,7 @@
 - **GitHub Releases 页面**：[https://github.com/startips/DreamTales/releases](https://github.com/startips/DreamTales/releases)
 - **最新版 APK 直接下载**：[GitHub Releases 最新版](https://github.com/startips/DreamTales/releases/latest)
 
-> 安装支持 Android 8.0 (API 26) 及更高版本；官方适配与验收覆盖 Android 14+ 的 Pixel、三星、小米、OPPO、vivo、荣耀近两年机型。华为 HarmonyOS 不在本轮支持范围。
+> 官方支持 Android 14+（API 34），适配 Pixel、三星、小米、OPPO、vivo、荣耀近两年机型。华为 HarmonyOS 不在本轮支持范围。
 
 ---
 
@@ -146,8 +146,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    在 GitHub 仓库 **Settings ➡️ Secrets and variables ➡️ Actions** 中添加 API 密钥（如 `DEFAULT_MIMO_API_KEY`、`DEFAULT_CPA_API_KEY` 等），以及固定发布签名所需的 `RELEASE_KEYSTORE_BASE64`、`RELEASE_KEYSTORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。
 2. **打 Tag 并推送到仓库**：
    ```bash
-   git tag v2.1.2
-   git push origin v2.1.2
+   git tag v2.1.3
+   git push origin v2.1.3
    ```
 3. GitHub Actions 将构建 **正式 Release APK**（`assembleRelease`，非 debug 包）并自动创建 GitHub Release，随后把 `version.json` 同步回 `main`。客户端会优先读取 `version.json`，因此能立即感知新版本并弹窗提示更新。
 

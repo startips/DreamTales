@@ -40,10 +40,10 @@ android {
 
     defaultConfig {
         applicationId = "com.bedtime.dreamtales"
-        minSdk = 26
+        minSdk = 34
         targetSdk = 34
-        versionCode = 7
-        versionName = "2.1.2"
+        versionCode = 8
+        versionName = "2.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -106,6 +106,11 @@ android {
     }
 
     packaging {
+        dex {
+            // minSdk 34 默认会把 dex 以未压缩形式打包，导致 APK 从 ~17MB 膨胀到 ~52MB；
+            // 强制压缩 dex，保持下载体积和旧版本一致，安装时由系统解压。
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }

@@ -1150,7 +1150,7 @@ class StoryPlaybackService : MediaSessionService() {
 
         val notification = Notification.Builder(this, AppConstants.PLAYBACK_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_moon)
-            .setContentTitle("DreamTales 睡前伴读")
+            .setContentTitle("月眠 · 睡前伴读")
             .setContentText(if (title.isNotBlank()) "正在播放: $title" else "伴读已就绪")
             .setContentIntent(pendingIntent)
             .setOngoing(isPlaying)

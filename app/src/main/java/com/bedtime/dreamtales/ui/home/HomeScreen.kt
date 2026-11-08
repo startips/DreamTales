@@ -339,12 +339,20 @@ fun HomeScreen(
                             fontSize = 22.sp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "DreamTales",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                text = "月眠",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "DreamTales",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                letterSpacing = 1.sp
+                            )
+                        }
                     }
 
                     // 右上角操作区：外观切换小图标 + 常规更多菜单（并列）
@@ -1199,7 +1207,7 @@ fun HomeScreen(
 
                     // 1. 复制到剪贴板，方便在任意地方粘贴
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("DreamTales故事书单", jsonStr))
+                    clipboard.setPrimaryClip(ClipData.newPlainText("月眠故事书单", jsonStr))
 
                     // 2. 调起系统原生分享（微信、文件管理、隔空等）
                     val shareIntent = Intent().apply {
@@ -1208,7 +1216,7 @@ fun HomeScreen(
                         type = "application/json"
                     }
                     try {
-                        context.startActivity(Intent.createChooser(shareIntent, "分享/备份 DreamTales 故事书单"))
+                        context.startActivity(Intent.createChooser(shareIntent, "分享/备份月眠故事书单"))
                     } catch (e: Exception) {
                         Toast.makeText(context, "故事书单已成功复制到剪贴板", Toast.LENGTH_LONG).show()
                     }

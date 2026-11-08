@@ -61,7 +61,7 @@ object DiagnosticsStore {
     fun exportReport(context: Context): File {
         val dir = File(context.cacheDir, "diagnostics").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
-        val file = File(dir, "DreamTales-diagnostics-${System.currentTimeMillis()}.txt")
+        val file = File(dir, "YueMian-diagnostics-${System.currentTimeMillis()}.txt")
         file.bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(buildDeviceInfo(context))
             writer.write("\n\n===== 诊断记录 =====\n")
@@ -93,10 +93,10 @@ object DiagnosticsStore {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "DreamTales 诊断日志")
+            putExtra(Intent.EXTRA_SUBJECT, "月眠 诊断日志")
             putExtra(
                 Intent.EXTRA_TEXT,
-                "DreamTales 诊断日志，可附加到 GitHub Issue：https://github.com/startips/DreamTales/issues"
+                "月眠 诊断日志，可附加到 GitHub Issue：https://github.com/startips/DreamTales/issues"
             )
             clipData = ClipData.newRawUri("diagnostics", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -147,7 +147,7 @@ object DiagnosticsStore {
         val metrics = context.resources.displayMetrics
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         return buildString {
-            appendLine("DreamTales 诊断日志")
+            appendLine("月眠 诊断日志")
             appendLine("生成时间: ${formatTime(System.currentTimeMillis())}")
             appendLine("应用版本: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("构建类型: ${if (BuildConfig.DEBUG) "debug" else "release"}")
