@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.1.3",
-  "name": "v2.1.3",
-  "versionName": "2.1.3",
-  "versionCode": 8,
-  "body": "月眠 2.1.3：中文品牌名、精简关于页、Android 14+、单色主题图标；诊断日志仅本地导出。",
-  "published_at": "2026-11-08T09:52:28Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.3/DreamTales-v2.1.3.apk",
-  "apkName": "DreamTales-v2.1.3.apk",
-  "apkSizeBytes": 18055479,
+  "tag_name": "v2.1.4",
+  "name": "v2.1.4",
+  "versionName": "2.1.4",
+  "versionCode": 9,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.3...v2.1.4",
+  "published_at": "2026-11-08T11:24:33Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.4/DreamTales-v2.1.4.apk",
+  "apkName": "DreamTales-v2.1.4.apk",
+  "apkSizeBytes": 18055475,
   "assets": [
     {
-      "name": "DreamTales-v2.1.3.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.3/DreamTales-v2.1.3.apk",
-      "size": 18055479
+      "name": "DreamTales-v2.1.4.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.4/DreamTales-v2.1.4.apk",
+      "size": 18055475
     }
   ]
 }
