@@ -3,7 +3,7 @@
   "name": "v2.1.5",
   "versionName": "2.1.5",
   "versionCode": 10,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.4...v2.1.5",
+  "body": "月眠 2.1.5：修复 TTS 超长静音、播完进度停在末尾、首页迷你播放器显示故事封面，首页改为「睡前伴读故事」。",
   "published_at": "2026-11-08T12:29:01Z",
   "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.5/DreamTales-v2.1.5.apk",
   "apkName": "DreamTales-v2.1.5.apk",
