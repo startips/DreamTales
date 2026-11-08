@@ -243,9 +243,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val file = File(cached.localFilePath)
             if (file.exists() && file.length() > 0) {
                 viewModelScope.launch {
-                    storyRepository.recordStoryPlayed(story.id)
+                    try {
+                        // 走仓库统一入口：顺带清理旧缓存里的超长静音，并校验音频哈希
+                        val filePath = storyRepository.getOrSynthesizeStoryAudio(story, currentVoice)
+                        storyRepository.recordStoryPlayed(story.id)
+                        _synthesisState.value = SynthesisUiState.ReadyToPlay(story, filePath, autoPlay)
+                    } catch (e: Exception) {
+                        _synthesisState.value = SynthesisUiState.Error(
+                            getFriendlyErrorMessage(e, "读取本地音频失败")
+                        )
+                    }
                 }
-                _synthesisState.value = SynthesisUiState.ReadyToPlay(story, file.absolutePath, autoPlay)
                 return
             }
         }
