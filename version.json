@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.1.1",
-  "name": "v2.1.1",
-  "versionName": "2.1.1",
-  "versionCode": 6,
-  "body": "1. 远端发布改为正式 Release 构建，不再发布 debug 包\n2. 使用固定签名密钥，后续版本可应用内无缝覆盖更新\n3. 保留既有应用数据，升级无需卸载",
-  "published_at": "2026-11-08T06:13:23Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.1/DreamTales-v2.1.1.apk",
-  "apkName": "DreamTales-v2.1.1.apk",
-  "apkSizeBytes": 18137539,
+  "tag_name": "v2.1.2",
+  "name": "v2.1.2",
+  "versionName": "2.1.2",
+  "versionCode": 7,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.1...v2.1.2",
+  "published_at": "2026-11-08T07:58:25Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.2/DreamTales-v2.1.2.apk",
+  "apkName": "DreamTales-v2.1.2.apk",
+  "apkSizeBytes": 18153963,
   "assets": [
     {
-      "name": "DreamTales-v2.1.1.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.1/DreamTales-v2.1.1.apk",
-      "size": 18137539
+      "name": "DreamTales-v2.1.2.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.2/DreamTales-v2.1.2.apk",
+      "size": 18153963
     }
   ]
 }
