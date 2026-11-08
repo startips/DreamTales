@@ -69,10 +69,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.BuildConfig
+import com.bedtime.dreamtales.core.diagnostics.DiagnosticsStore
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.local.entity.Story
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 伴读与系统设置总览弹窗
@@ -666,6 +669,10 @@ fun AboutDialog(
     onCheckUpdateClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isExportingDiagnostics by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = MaterialTheme.shapes.extraLarge,
@@ -751,6 +758,85 @@ fun AboutDialog(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("检查更新", style = MaterialTheme.typography.labelSmall)
                             }
+                        }
+                    }
+                }
+
+                // 诊断日志导出：本地收集崩溃/ANR，用户主动分享，不自动上传
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🩺 诊断日志",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "导出崩溃/ANR 与设备信息，便于反馈问题；不包含故事内容或 API Key。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (isExportingDiagnostics) return@OutlinedButton
+                                isExportingDiagnostics = true
+                                scope.launch {
+                                    try {
+                                        val file = withContext(Dispatchers.IO) {
+                                            DiagnosticsStore.exportReport(context)
+                                        }
+                                        DiagnosticsStore.shareReport(context, file)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            "导出诊断日志失败：${e.message ?: "未知错误"}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } finally {
+                                        isExportingDiagnostics = false
+                                    }
+                                }
+                            },
+                            enabled = !isExportingDiagnostics,
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            if (isExportingDiagnostics) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            } else {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(
+                                text = if (isExportingDiagnostics) "导出中..." else "导出",
+                                style = MaterialTheme.typography.labelSmall
+                            )
                         }
                     }
                 }

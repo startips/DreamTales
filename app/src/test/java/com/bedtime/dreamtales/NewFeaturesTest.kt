@@ -3,6 +3,7 @@ package com.bedtime.dreamtales
 import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.audio.AmbientPreset
+import com.bedtime.dreamtales.core.diagnostics.DiagnosticsStore
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.share.ShareBundleProtocol
 import com.bedtime.dreamtales.core.share.ShareManifest
@@ -444,5 +445,18 @@ class NewFeaturesTest {
         assertEquals("今夜童话已备好", WidgetStorySelector.title(null))
         assertTrue(WidgetStorySelector.subtitle(popular).contains("4 分钟"))
         assertEquals("打开文库", WidgetStorySelector.playButtonLabel(null))
+    }
+
+    @Test
+    fun testDiagnosticsSanitizerRedactsSecrets() {
+        val raw = "api_key=abc12345 bearer token123456 sk-abcdefgh12345678 今晚的故事"
+        val cleaned = DiagnosticsStore.sanitize(raw)
+        assertTrue(cleaned.contains("api_key=***"))
+        assertTrue(cleaned.contains("Bearer ***"))
+        assertTrue(cleaned.contains("sk-***"))
+        assertTrue(cleaned.contains("今晚的故事"))
+        assertFalse(cleaned.contains("abc12345"))
+        assertFalse(cleaned.contains("token123456"))
+        assertFalse(cleaned.contains("abcdefgh12345678"))
     }
 }

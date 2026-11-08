@@ -89,7 +89,7 @@
 - **GitHub Releases 页面**：[https://github.com/startips/DreamTales/releases](https://github.com/startips/DreamTales/releases)
 - **最新版 APK 直接下载**：[GitHub Releases 最新版](https://github.com/startips/DreamTales/releases/latest)
 
-> 支持 Android 8.0 (API 26) 及更高版本（兼容鸿蒙 HarmonyOS、小米 HyperOS、vivo OriginOS、OPPO ColorOS 等主流系统）。
+> 安装支持 Android 8.0 (API 26) 及更高版本；官方适配与验收覆盖 Android 14+ 的 Pixel、三星、小米、OPPO、vivo、荣耀近两年机型。华为 HarmonyOS 不在本轮支持范围。
 
 ---
 
@@ -146,8 +146,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    在 GitHub 仓库 **Settings ➡️ Secrets and variables ➡️ Actions** 中添加 API 密钥（如 `DEFAULT_MIMO_API_KEY`、`DEFAULT_CPA_API_KEY` 等），以及固定发布签名所需的 `RELEASE_KEYSTORE_BASE64`、`RELEASE_KEYSTORE_PASSWORD`、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`。
 2. **打 Tag 并推送到仓库**：
    ```bash
-   git tag v2.1.1
-   git push origin v2.1.1
+   git tag v2.1.2
+   git push origin v2.1.2
    ```
 3. GitHub Actions 将构建 **正式 Release APK**（`assembleRelease`，非 debug 包）并自动创建 GitHub Release，随后把 `version.json` 同步回 `main`。客户端会优先读取 `version.json`，因此能立即感知新版本并弹窗提示更新。
 
@@ -158,6 +158,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **Local-First 数据安全**：故事文库、自定义绘本封面与离线音频均持久化保存在应用私有沙盒目录中。家长录制的声音切片仅经端到端 HTTPS 加密传输至语音大模型进行即时音色复刻，不作非授权留存。
 - **敏感配置防泄露**：源码中 0 硬编码凭证，编译期通过 Gradle 注入，全链路提交历史均经过密钥清洗。
 - **免权限图片选取**：采用系统原生 PhotoPicker 机制，不需要向用户索取读取整机相册的大宽泛权限。
+- **诊断日志本地化**：崩溃/ANR 诊断仅写入应用私有目录，需在「关于应用」中手动导出分享；不包含故事正文、宝宝档案或 API Key，也不会自动上传。
 
 ---
 

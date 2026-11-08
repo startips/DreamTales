@@ -1,6 +1,7 @@
 package com.bedtime.dreamtales
 
 import android.app.Application
+import com.bedtime.dreamtales.core.diagnostics.DiagnosticsStore
 import com.bedtime.dreamtales.data.repository.StoryRepository
 import com.bedtime.dreamtales.data.repository.VoiceRepository
 import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
@@ -12,8 +13,11 @@ class DreamTalesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 安装轻量崩溃采集，并在后台读取系统记录的 ANR/退出原因
+        DiagnosticsStore.install(this)
         // 预热 Room 数据库、补齐经典童话库、预置音色及后台预加载
         CoroutineScope(Dispatchers.IO).launch {
+            DiagnosticsStore.collectExitInfo(this@DreamTalesApp)
             val storyRepo = StoryRepository(this@DreamTalesApp)
             storyRepo.ensureClassicStoriesPopulated()
             DreamTalesWidgetProvider.refresh(this@DreamTalesApp)
