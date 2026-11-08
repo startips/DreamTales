@@ -3,6 +3,7 @@ package com.bedtime.dreamtales
 import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.audio.AmbientPreset
+import com.bedtime.dreamtales.core.audio.WavSilenceCompactor
 import com.bedtime.dreamtales.core.diagnostics.DiagnosticsStore
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.share.ShareBundleProtocol
@@ -19,9 +20,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlin.math.PI
+import kotlin.math.sin
 
 class NewFeaturesTest {
 
@@ -458,5 +465,63 @@ class NewFeaturesTest {
         assertFalse(cleaned.contains("abc12345"))
         assertFalse(cleaned.contains("token123456"))
         assertFalse(cleaned.contains("abcdefgh12345678"))
+    }
+
+    @Test
+    fun testWavSilenceCompactorRemovesLongInternalGap() {
+        val rate = 8000
+        val tone = ShortArray(rate / 2) { i ->
+            (sin(2.0 * PI * 440.0 * i / rate) * 10000).toInt().toShort()
+        }
+        val samples = tone + ShortArray(rate * 5) + tone + ShortArray(rate / 2)
+        val file = File.createTempFile("dreamtales-wav-", ".wav")
+        try {
+            writeWav(file, rate, 1, samples)
+            val before = file.length()
+            assertTrue(WavSilenceCompactor.compactInPlace(file))
+            val after = file.length()
+            assertTrue("压缩后应更小", after < before)
+            val duration = (after - 44).toDouble() / (rate * 2)
+            assertTrue("压缩后时长异常: $duration", duration in 1.0..3.0)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun testWavSilenceCompactorKeepsNormalShortPause() {
+        val rate = 8000
+        val tone = ShortArray(rate / 2) { i ->
+            (sin(2.0 * PI * 440.0 * i / rate) * 10000).toInt().toShort()
+        }
+        val file = File.createTempFile("dreamtales-wav-", ".wav")
+        try {
+            writeWav(file, rate, 1, tone + ShortArray(rate) + tone)
+            val before = file.length()
+            assertFalse(WavSilenceCompactor.compactInPlace(file))
+            assertEquals(before, file.length())
+        } finally {
+            file.delete()
+        }
+    }
+
+    private fun writeWav(file: File, sampleRate: Int, channels: Int, samples: ShortArray) {
+        val dataSize = samples.size * 2
+        val buffer = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.put("RIFF".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(36 + dataSize)
+        buffer.put("WAVE".toByteArray(Charsets.US_ASCII))
+        buffer.put("fmt ".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(16)
+        buffer.putShort(1)
+        buffer.putShort(channels.toShort())
+        buffer.putInt(sampleRate)
+        buffer.putInt(sampleRate * channels * 2)
+        buffer.putShort((channels * 2).toShort())
+        buffer.putShort(16)
+        buffer.put("data".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(dataSize)
+        samples.forEach { buffer.putShort(it) }
+        FileOutputStream(file).use { it.write(buffer.array()) }
     }
 }

@@ -797,8 +797,18 @@ class StoryPlaybackService : MediaSessionService() {
             PlaybackMode.STOP_AFTER_CURRENT -> {
                 exoPlayer.pause()
                 pauseAmbientPlayers()
-                exoPlayer.seekTo(0)
-                updateState { it.copy(isPlaying = false, currentPositionMs = 0L) }
+                val endPosition = maxOf(
+                    current.totalDurationMs,
+                    exoPlayer.duration,
+                    exoPlayer.currentPosition
+                )
+                updateState {
+                    it.copy(
+                        isPlaying = false,
+                        currentPositionMs = endPosition.coerceAtLeast(0L),
+                        totalDurationMs = maxOf(it.totalDurationMs, endPosition).coerceAtLeast(0L)
+                    )
+                }
                 finalizePlaybackSession("COMPLETED")
                 updateNotification(current.storyTitle, isPlaying = false)
             }

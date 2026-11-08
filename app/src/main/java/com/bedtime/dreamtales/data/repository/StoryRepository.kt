@@ -6,6 +6,7 @@ import android.util.Base64
 import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.StorySpeechHelper
+import com.bedtime.dreamtales.core.audio.WavSilenceCompactor
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.data.api.ApiClient
 import com.bedtime.dreamtales.data.api.CpaChatRequest
@@ -160,6 +161,8 @@ class StoryRepository(private val context: Context) {
         if (existingCache != null && existingCache.isComplete) {
             val file = File(existingCache.localFilePath)
             if (file.exists() && file.length() > 0 && file.absolutePath == targetFile.absolutePath) {
+                // 修复历史缓存中 TTS 插入的超长空白，下一次播放即生效
+                WavSilenceCompactor.compactInPlace(file)
                 onProgress(100)
                 return@withContext file.absolutePath
             } else {
@@ -178,6 +181,7 @@ class StoryRepository(private val context: Context) {
             if (doubleCheck != null && doubleCheck.isComplete) {
                 val cachedFile = File(doubleCheck.localFilePath)
                 if (cachedFile.exists() && cachedFile.length() > 0 && cachedFile.absolutePath == targetFile.absolutePath) {
+                    WavSilenceCompactor.compactInPlace(cachedFile)
                     onProgress(100)
                     return@withContext cachedFile.absolutePath
                 }
@@ -271,6 +275,8 @@ class StoryRepository(private val context: Context) {
 
         val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
         targetFile.writeBytes(audioBytes)
+        // 清理 TTS 偶发插入的超长静音，避免出现“播放器 5 分钟、实际朗读 2 分钟”的空白
+        WavSilenceCompactor.compactInPlace(targetFile)
         onProgress(90)
     }
 

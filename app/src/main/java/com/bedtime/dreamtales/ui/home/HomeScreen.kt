@@ -838,7 +838,7 @@ fun HomeScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "🌙 睡前伴读文库",
+                                text = "🌙 睡前伴读故事",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
@@ -2012,6 +2012,19 @@ private fun BottomMiniPlayer(
         (playbackState.currentPositionMs.toFloat() / playbackState.totalDurationMs).coerceIn(0f, 1f)
     } else 0f
 
+    val coverBitmap = remember(playbackState.coverImagePath) {
+        playbackState.coverImagePath
+            ?.takeIf { it.isNotBlank() }
+            ?.let { path ->
+                val file = File(path)
+                if (file.exists() && file.length() > 0) {
+                    runCatching {
+                        BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                    }.getOrNull()
+                } else null
+            }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2048,7 +2061,16 @@ private fun BottomMiniPlayer(
                         .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "🌙", fontSize = 18.sp)
+                    if (coverBitmap != null) {
+                        Image(
+                            bitmap = coverBitmap,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(text = "🌙", fontSize = 18.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
