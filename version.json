@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.1.2",
-  "name": "v2.1.2",
-  "versionName": "2.1.2",
-  "versionCode": 7,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.1...v2.1.2",
-  "published_at": "2026-11-08T07:58:25Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.2/DreamTales-v2.1.2.apk",
-  "apkName": "DreamTales-v2.1.2.apk",
-  "apkSizeBytes": 18153963,
+  "tag_name": "v2.1.3",
+  "name": "v2.1.3",
+  "versionName": "2.1.3",
+  "versionCode": 8,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.2...v2.1.3",
+  "published_at": "2026-11-08T09:52:28Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.3/DreamTales-v2.1.3.apk",
+  "apkName": "DreamTales-v2.1.3.apk",
+  "apkSizeBytes": 18055479,
   "assets": [
     {
-      "name": "DreamTales-v2.1.2.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.2/DreamTales-v2.1.2.apk",
-      "size": 18153963
+      "name": "DreamTales-v2.1.3.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.3/DreamTales-v2.1.3.apk",
+      "size": 18055479
     }
   ]
 }
