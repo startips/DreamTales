@@ -84,6 +84,7 @@ data class StoryPlaybackState(
     val storyTitle: String = "",
     val storyContent: String = "",
     val coverImagePath: String? = null,
+    val storyEmoji: String = "🌙",
     val isGeneratingCover: Boolean = false,
     val isPlaying: Boolean = false,
     val currentPositionMs: Long = 0L,
@@ -496,6 +497,7 @@ class StoryPlaybackService : MediaSessionService() {
                 storyTitle = storyTitle,
                 storyContent = storyContent,
                 coverImagePath = existingCover,
+                storyEmoji = "🌙",
                 currentSpeed = 1.0f,
                 isPlaying = autoPlay,
                 currentPositionMs = 0L,
@@ -503,6 +505,14 @@ class StoryPlaybackService : MediaSessionService() {
             )
         }
         refreshCurrentFavoriteState(storyId)
+        serviceScope.launch {
+            val emoji = runCatching {
+                storyRepository.getStoryById(storyId)?.iconEmoji
+            }.getOrNull()
+            if (!emoji.isNullOrBlank()) {
+                updateState { it.copy(storyEmoji = emoji) }
+            }
+        }
 
         val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
         exoPlayer.setMediaItem(mediaItem)

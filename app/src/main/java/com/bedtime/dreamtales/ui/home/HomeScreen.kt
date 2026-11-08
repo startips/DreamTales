@@ -2069,7 +2069,10 @@ private fun BottomMiniPlayer(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Text(text = "🌙", fontSize = 18.sp)
+                        Text(
+                            text = playbackState.storyEmoji.ifBlank { "🌙" },
+                            fontSize = 20.sp
+                        )
                     }
                 }
 
