@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.1.4",
-  "name": "v2.1.4",
-  "versionName": "2.1.4",
-  "versionCode": 9,
-  "body": "月眠 2.1.4：更新检测改为静默小圆点，不再自动弹窗；进入关于页主动点击更新后才提示下载安装。",
-  "published_at": "2026-11-08T11:24:33Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.4/DreamTales-v2.1.4.apk",
-  "apkName": "DreamTales-v2.1.4.apk",
-  "apkSizeBytes": 18055475,
+  "tag_name": "v2.1.5",
+  "name": "v2.1.5",
+  "versionName": "2.1.5",
+  "versionCode": 10,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.4...v2.1.5",
+  "published_at": "2026-11-08T12:29:01Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.5/DreamTales-v2.1.5.apk",
+  "apkName": "DreamTales-v2.1.5.apk",
+  "apkSizeBytes": 18055479,
   "assets": [
     {
-      "name": "DreamTales-v2.1.4.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.4/DreamTales-v2.1.4.apk",
-      "size": 18055475
+      "name": "DreamTales-v2.1.5.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.5/DreamTales-v2.1.5.apk",
+      "size": 18055479
     }
   ]
 }
