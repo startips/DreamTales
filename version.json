@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.1.7",
-  "name": "v2.1.7",
-  "versionName": "2.1.7",
-  "versionCode": 12,
-  "body": "月眠 2.1.7：修复已缓存故事的超长静音（小挖机打哈欠 306.7s→126.7s）；播完进度停在末尾；迷你播放器显示故事封面/表情；首页改为「睡前伴读故事」。",
-  "published_at": "2026-11-08T13:07:26Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.1.7/DreamTales-v2.1.7.apk",
-  "apkName": "DreamTales-v2.1.7.apk",
-  "apkSizeBytes": 18055479,
+  "tag_name": "v2.2.0",
+  "name": "v2.2.0",
+  "versionName": "2.2.0",
+  "versionCode": 13,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.7...v2.2.0",
+  "published_at": "2026-11-10T01:41:15Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.2.0/DreamTales-v2.2.0.apk",
+  "apkName": "DreamTales-v2.2.0.apk",
+  "apkSizeBytes": 18153372,
   "assets": [
     {
-      "name": "DreamTales-v2.1.7.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.1.7/DreamTales-v2.1.7.apk",
-      "size": 18055479
+      "name": "DreamTales-v2.2.0.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.2.0/DreamTales-v2.2.0.apk",
+      "size": 18153372
     }
   ]
 }
