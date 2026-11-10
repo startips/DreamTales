@@ -3,7 +3,7 @@
   "name": "v2.2.0",
   "versionName": "2.2.0",
   "versionCode": 13,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.1.7...v2.2.0",
+  "body": "月眠 2.2.0 · 睡前仪式\n\n- 新增「晚安提醒」：固定时间温柔提醒，可一键开始今晚故事；重启或覆盖安装后自动恢复\n- 新增「今晚故事单」：挑选多篇故事、自由排序，按顺序播完即止，锁屏也能切下一首\n- 新增「断点续播」：首页「继续听」从上次位置继续，冷启动和覆盖安装都不丢进度\n- 新增「纯声景」：不读故事，只播放雨声、海浪、壁炉、虫鸣、摇篮音盒，支持独立定时\n- 新增 0.8x / 0.9x / 1.0x 播放速度，与最后 5 分钟渐弱正确叠加\n- 修复睡眠定时音量归零后再次播放无声的问题\n- 数据库升级到 v7，旧故事、缓存、宝宝档案与陪伴周报完整保留",
   "published_at": "2026-11-10T01:41:15Z",
   "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.2.0/DreamTales-v2.2.0.apk",
   "apkName": "DreamTales-v2.2.0.apk",
