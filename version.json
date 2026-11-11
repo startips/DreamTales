@@ -3,7 +3,7 @@
   "name": "v2.2.2",
   "versionName": "2.2.2",
   "versionCode": 15,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.2.1...v2.2.2",
+  "body": "月眠 2.2.2 · 稳定性小补丁\n\n- 修复弹窗中次级按钮与背景同色、按钮边界消失的问题\n- 修复音色选择面板未选中卡片与面板背景融合的问题\n- 「继续听」不再清空已排好的今晚故事单\n- 晚安提醒开启前先检查通知权限，未开启时引导授权\n- 纯声景清空全部音轨后停止静音后台循环并释放唤醒锁\n- 手动上一首 / 下一首立即响应，连续点击不再重复切歌\n- 纯声景模式隐藏锁屏收藏与切歌按钮\n- 系统时间或时区变化后自动重算提醒\n- 补齐列表 key，清理无用导入与缩进",
   "published_at": "2026-11-11T08:04:25Z",
   "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.2.2/DreamTales-v2.2.2.apk",
   "apkName": "DreamTales-v2.2.2.apk",
