@@ -3,7 +3,7 @@
   "name": "v2.2.1",
   "versionName": "2.2.1",
   "versionCode": 14,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.2.0...v2.2.1",
+  "body": "月眠 2.2.1 · 更轻的界面\n\n- 去掉首页、设置、播放页和弹窗中所有卡片的描边\n- 搜索框、胶囊、筛选 Chip 与按钮统一为无边框填充样式\n- 当前播放、选中音色、睡眠定时与提醒时间改用底色和状态图标区分\n- 错误提示改用淡红底色；录音页的装饰圆环一并移除\n- 优化暗色模式卡片层次，避免无边框后与背景混在一起\n- 更新 README 日间/夜间首页、播放页与关于页截图",
   "published_at": "2026-11-11T03:12:03Z",
   "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.2.1/DreamTales-v2.2.1.apk",
   "apkName": "DreamTales-v2.2.1.apk",
