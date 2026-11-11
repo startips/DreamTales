@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -91,11 +90,6 @@ fun BedtimeReminderDialog(
                             } else {
                                 MaterialTheme.colorScheme.surfaceContainer
                             }
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outlineVariant
                         )
                     ) {
                         Row(

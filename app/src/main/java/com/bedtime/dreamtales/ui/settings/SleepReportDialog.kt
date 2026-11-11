@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -138,8 +137,7 @@ fun SleepReportDialog(
                     shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
@@ -199,8 +197,7 @@ private fun StatCard(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -302,8 +299,7 @@ private fun RecentSessionRow(session: SleepSessionSnapshot) {
         shape = MaterialTheme.shapes.small,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        )
     ) {
         Row(
             modifier = Modifier

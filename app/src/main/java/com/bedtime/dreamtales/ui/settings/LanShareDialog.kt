@@ -3,7 +3,6 @@ package com.bedtime.dreamtales.ui.settings
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,8 +26,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -130,7 +129,8 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                        ),
+                        border = null
                     )
                     FilterChip(
                         selected = mode == 1,
@@ -140,7 +140,8 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                        ),
+                        border = null
                     )
                 }
 
@@ -150,8 +151,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        )
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
@@ -284,8 +284,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                             shape = MaterialTheme.shapes.medium,
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                            ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            )
                         ) {
                             Row(
                                 modifier = Modifier
@@ -307,7 +306,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                OutlinedButton(
+                                FilledTonalButton(
                                     onClick = {
                                         importingDevice = device
                                         progress = 0
@@ -328,7 +327,6 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                         }
                                     },
                                     shape = CircleShape,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                     enabled = importingDevice == null
                                 ) {
                                     Text("接收", style = MaterialTheme.typography.labelMedium)

@@ -13,7 +13,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -43,12 +42,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -174,14 +172,13 @@ fun RecordVoiceScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 界面中央大字号展示 3 句安抚引导语 (MD3 OutlinedCard)
-            OutlinedCard(
+            // 界面中央大字号展示 3 句安抚引导语 (MD3 Card)
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.outlinedCardColors(
+                colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                )
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -280,8 +277,7 @@ fun RecordVoiceScreen(
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
@@ -342,8 +338,7 @@ fun RecordVoiceScreen(
                                 modifier = Modifier
                                     .size(76.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary), CircleShape),
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -406,8 +401,7 @@ fun RecordVoiceScreen(
                         shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(20.dp),
@@ -429,7 +423,7 @@ fun RecordVoiceScreen(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // 本地试听控制
-                            OutlinedButton(
+                            FilledTonalButton(
                                 onClick = {
                                     if (isPlayingSample) {
                                         viewModel.stopSamplePlayback()
@@ -438,8 +432,7 @@ fun RecordVoiceScreen(
                                     }
                                 },
                                 shape = MaterialTheme.shapes.small,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                colors = ButtonDefaults.outlinedButtonColors(
+                                colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     contentColor = MaterialTheme.colorScheme.primary
                                 ),
@@ -471,8 +464,10 @@ fun RecordVoiceScreen(
                                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    disabledBorderColor = Color.Transparent,
+                                    errorBorderColor = Color.Transparent
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -483,14 +478,13 @@ fun RecordVoiceScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedButton(
+                                FilledTonalButton(
                                     onClick = { viewModel.reset() },
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(48.dp),
                                     shape = CircleShape,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    colors = ButtonDefaults.outlinedButtonColors(
+                                    colors = ButtonDefaults.filledTonalButtonColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                         contentColor = MaterialTheme.colorScheme.onSurface
                                     )
@@ -531,9 +525,8 @@ fun RecordVoiceScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(20.dp),
@@ -549,7 +542,7 @@ fun RecordVoiceScreen(
                             Text(
                                 text = status.reason,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -582,8 +575,7 @@ fun RecordVoiceScreen(
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        )
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -611,14 +603,13 @@ fun RecordVoiceScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
                     ) {
                         Text(
                             text = state.message,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(14.dp)
                         )
                     }
@@ -639,8 +630,7 @@ private fun SentenceItem(index: String, text: String) {
             modifier = Modifier
                 .size(24.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)), CircleShape),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Text(

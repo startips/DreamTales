@@ -13,7 +13,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -76,8 +75,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -398,7 +395,6 @@ fun HomeScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier.size(34.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -546,13 +542,12 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // 讲故事人轻量气泡卡片
-                OutlinedCard(
+                Card(
                     onClick = { showVoiceSheet = true },
                     shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.outlinedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -591,8 +586,7 @@ fun HomeScreen(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                        ) {
+) {
                             Text(
                                 text = "更换 ▾",
                                 style = MaterialTheme.typography.labelSmall,
@@ -689,8 +683,10 @@ fun HomeScreen(
                                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                disabledBorderColor = Color.Transparent,
+                                errorBorderColor = Color.Transparent
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -746,11 +742,7 @@ fun HomeScreen(
                                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                                         labelColor = MaterialTheme.colorScheme.primary
                                     ),
-                                    border = SuggestionChipDefaults.suggestionChipBorder(
-                                        enabled = true,
-                                        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                                    )
-                                )
+                                                                        border = null)
                             }
                             items(recommendedStories) { tag ->
                                 SuggestionChip(
@@ -767,11 +759,7 @@ fun HomeScreen(
                                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                         labelColor = MaterialTheme.colorScheme.onSurface
                                     ),
-                                    border = SuggestionChipDefaults.suggestionChipBorder(
-                                        enabled = true,
-                                        borderColor = MaterialTheme.colorScheme.outlineVariant
-                                    )
-                                )
+                                                                        border = null)
                             }
                         }
 
@@ -869,15 +857,14 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val resumeItem = continueListening
                     if (resumeItem != null) {
-                        OutlinedCard(
+                        Card(
                             onClick = {
                                 viewModel.continueStory(resumeItem, onNavigateToPlayer)
                             },
                             shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.outlinedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                             ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -927,13 +914,12 @@ fun HomeScreen(
 
                     if (tonightQueue.isNotEmpty()) {
                         val totalMinutes = tonightQueue.sumOf { it.durationSeconds } / 60
-                        OutlinedCard(
+                        Card(
                             onClick = { showTonightQueueDialog = true },
                             shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.outlinedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                             ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -972,13 +958,12 @@ fun HomeScreen(
                         }
                     }
 
-                    OutlinedCard(
+                    Card(
                         onClick = onStartAmbient,
                         shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.outlinedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1055,7 +1040,6 @@ fun HomeScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier.clickable { showSortMenu = true }
                             ) {
                                 Row(
@@ -1101,12 +1085,11 @@ fun HomeScreen(
                     // 第二行：紧凑型本地故事搜索框
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(
-                            1.dp,
-                            if (localSearchQuery.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            else MaterialTheme.colorScheme.outlineVariant
-                        ),
+                        color = if (localSearchQuery.isNotBlank()) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(38.dp)
@@ -1211,9 +1194,8 @@ fun HomeScreen(
                             .padding(vertical = 12.dp),
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
+                        )
                     ) {
                         Column(
                             modifier = Modifier
@@ -1244,7 +1226,7 @@ fun HomeScreen(
             if (localSearchQuery.isBlank() && filteredAndSortedStories.size > 5) {
                 val isFullyLoaded = visibleStoryCount >= filteredAndSortedStories.size
                 item(key = "toggle_more_stories_button") {
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = {
                             if (isFullyLoaded) {
                                 visibleStoryCount = 5
@@ -1256,9 +1238,8 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer
                         )
                     ) {
                         val remainingCount = filteredAndSortedStories.size - visibleStoryCount
@@ -1448,7 +1429,7 @@ fun HomeScreen(
                 }
             },
             dismissButton = {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { showClearCacheConfirm = false },
                     shape = CircleShape
                 ) {
@@ -1570,7 +1551,7 @@ fun HomeScreen(
         ModalBottomSheet(
             onDismissRequest = { showVoiceSheet = false },
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(
@@ -1589,14 +1570,13 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = {
                             showVoiceSheet = false
                             onNavigateToRecord()
                         },
                         shape = CircleShape,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                             contentColor = MaterialTheme.colorScheme.primary
                         ),
@@ -1616,18 +1596,14 @@ fun HomeScreen(
                 ) {
                     items(allVoices, key = { it.id }) { voice ->
                         val isSelected = (voice.id == defaultVoice?.id)
-                        OutlinedCard(
+                        Card(
                             onClick = {
                                 viewModel.selectVoiceProfile(voice.id)
                                 showVoiceSheet = false
                             },
                             shape = MaterialTheme.shapes.medium,
-                            colors = CardDefaults.outlinedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1754,7 +1730,7 @@ fun HomeScreen(
                 }
             },
             dismissButton = {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { voiceToDelete = null },
                     shape = CircleShape
                 ) {
@@ -1913,8 +1889,7 @@ private fun CandidateStoryCard(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -1998,15 +1973,11 @@ private fun VerticalStoryCard(
     onPlayClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
-    OutlinedCard(
+    Card(
         onClick = onCardClick,
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.outlinedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = if (isCurrentPlaying || isSynthesizing) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (isCurrentPlaying || isSynthesizing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -2035,14 +2006,7 @@ private fun VerticalStoryCard(
                     modifier = Modifier
                         .size(50.dp)
                         .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(
-                            BorderStroke(
-                                1.dp,
-                                if (isCurrentPlaying || isSynthesizing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                            ),
-                            MaterialTheme.shapes.medium
-                        ),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     if (coverBitmap != null) {
@@ -2284,7 +2248,6 @@ private fun BottomMiniPlayer(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -2307,8 +2270,7 @@ private fun BottomMiniPlayer(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)), CircleShape),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     if (coverBitmap != null) {
@@ -2409,7 +2371,6 @@ private fun ThemeChangeHint(
                 shape = RoundedCornerShape(100.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 4.dp
             ) {
                 Row(

@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.player
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -91,10 +89,6 @@ fun SleepTimerDialog(
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                             else MaterialTheme.colorScheme.surfaceContainer
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                         )
                     ) {
                         Row(
@@ -136,10 +130,6 @@ fun SleepTimerDialog(
                     colors = CardDefaults.cardColors(
                         containerColor = if (isOff) MaterialTheme.colorScheme.surfaceContainerHighest
                         else MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    border = BorderStroke(
-                        1.dp,
-                        if (isOff) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant
                     )
                 ) {
                     Row(

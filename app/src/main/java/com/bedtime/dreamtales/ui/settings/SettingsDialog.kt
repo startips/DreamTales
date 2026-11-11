@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,10 +45,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -62,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -149,11 +148,10 @@ fun SettingsDialog(
                                 fontSize = 11.sp
                             )
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenChildProfile,
                             shape = CircleShape,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -196,11 +194,10 @@ fun SettingsDialog(
                                 fontSize = 11.sp
                             )
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenSleepReport,
                             shape = CircleShape,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -250,11 +247,10 @@ fun SettingsDialog(
                     }
                     if (bedtimeReminder.enabled) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenBedtimeReminderTime,
                             shape = CircleShape,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -289,11 +285,10 @@ fun SettingsDialog(
                                 fontSize = 11.sp
                             )
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenLanShare,
                             shape = CircleShape,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -318,12 +313,11 @@ fun SettingsDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenExport,
                             shape = CircleShape,
                             modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -332,12 +326,11 @@ fun SettingsDialog(
                             Text("导出书单", style = MaterialTheme.typography.labelSmall)
                         }
 
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = onOpenImport,
                             shape = CircleShape,
                             modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                         ) {
@@ -413,8 +406,7 @@ private fun SettingSectionCard(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -480,13 +472,12 @@ fun ExportStoriesDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     val allSelected = selectedIds.size == allStories.size
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = {
                             selectedIds = if (allSelected) emptySet() else allStories.map { it.id }.toSet()
                         },
                         shape = CircleShape,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
                         )
                     ) {
@@ -508,7 +499,7 @@ fun ExportStoriesDialog(
                 ) {
                     items(allStories, key = { it.id }) { story ->
                         val isChecked = story.id in selectedIds
-                        OutlinedCard(
+                        Card(
                             onClick = {
                                 selectedIds = if (isChecked) {
                                     selectedIds - story.id
@@ -517,12 +508,8 @@ fun ExportStoriesDialog(
                                 }
                             },
                             shape = MaterialTheme.shapes.small,
-                            colors = CardDefaults.outlinedCardColors(
+                            colors = CardDefaults.cardColors(
                                 containerColor = if (isChecked) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -584,7 +571,7 @@ fun ExportStoriesDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = CircleShape) {
+            FilledTonalButton(onClick = onDismiss, shape = CircleShape) {
                 Text("取消", style = MaterialTheme.typography.labelLarge)
             }
         }
@@ -632,7 +619,7 @@ fun ImportStoriesDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clip = clipboard.primaryClip
@@ -650,10 +637,9 @@ fun ImportStoriesDialog(
                     },
                     shape = CircleShape,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -680,8 +666,10 @@ fun ImportStoriesDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        disabledBorderColor = Color.Transparent,
+                        errorBorderColor = Color.Transparent
                     )
                 )
 
@@ -713,7 +701,7 @@ fun ImportStoriesDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = CircleShape) {
+            FilledTonalButton(onClick = onDismiss, shape = CircleShape) {
                 Text("取消", style = MaterialTheme.typography.labelLarge)
             }
         }

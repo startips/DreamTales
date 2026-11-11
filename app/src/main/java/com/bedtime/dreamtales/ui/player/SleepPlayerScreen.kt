@@ -19,7 +19,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -69,7 +68,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -275,13 +273,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = (activeTab == 0),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
+                                                        border = null)
 
                         Spacer(modifier = Modifier.width(10.dp))
 
@@ -296,13 +288,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = (activeTab == 1),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
+                                                        border = null)
 
                         Spacer(modifier = Modifier.width(10.dp))
 
@@ -317,13 +303,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = (activeTab == 2),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
+                                                        border = null)
                     }
                 }
 
@@ -400,8 +380,7 @@ fun SleepPlayerScreen(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
+) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -421,11 +400,6 @@ fun SleepPlayerScreen(
                             shape = CircleShape,
                             color = if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                             else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(
-                                1.dp,
-                                if (ambientMix.isNotEmpty()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                else MaterialTheme.colorScheme.outlineVariant
-                            ),
                             modifier = Modifier.clickable { showAmbientSheet = true }
                         ) {
                             Row(
@@ -465,12 +439,6 @@ fun SleepPlayerScreen(
                             color = if (isFading) MaterialTheme.colorScheme.primaryContainer
                             else if (playbackState.isTimerActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                             else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(
-                                1.dp,
-                                if (isFading) MaterialTheme.colorScheme.primary
-                                else if (playbackState.isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                else MaterialTheme.colorScheme.outlineVariant
-                            ),
                             modifier = Modifier.clickable { showTimerDialog = true }
                         ) {
                             Row(
@@ -584,7 +552,6 @@ fun SleepPlayerScreen(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier.clickable { viewModel.cyclePlaybackMode() }
                         ) {
                             Row(
@@ -611,7 +578,6 @@ fun SleepPlayerScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier.clickable { showSpeedMenu = true }
                             ) {
                                 Text(
@@ -855,8 +821,7 @@ private fun AmbientOnlyPlayerContent(
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
+) {
                 Text(
                     text = trackText.ifBlank { "还没有选择声景，点下方「助眠背景」添加" },
                     style = MaterialTheme.typography.bodySmall,
@@ -880,7 +845,6 @@ private fun AmbientOnlyPlayerContent(
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                     modifier = Modifier.clickable { onOpenAmbient() }
                 ) {
                     Text(
@@ -899,14 +863,6 @@ private fun AmbientOnlyPlayerContent(
                     } else {
                         MaterialTheme.colorScheme.surfaceContainerHigh
                     },
-                    border = BorderStroke(
-                        1.dp,
-                        if (playbackState.isTimerActive) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        }
-                    ),
                     modifier = Modifier.clickable { onOpenTimer() }
                 ) {
                     Text(
@@ -1095,8 +1051,7 @@ private fun StoryPagesComponent(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                    )
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -1137,11 +1092,10 @@ private fun StoryPagesComponent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = { manualIndex = (currentIndex - 1).coerceAtLeast(0) },
                 enabled = currentIndex > 0,
                 shape = CircleShape,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
             ) {
                 Text("‹ 上一页", style = MaterialTheme.typography.labelSmall)
@@ -1172,11 +1126,10 @@ private fun StoryPagesComponent(
                 }
             }
 
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = { manualIndex = (currentIndex + 1).coerceAtMost(sortedPages.lastIndex) },
                 enabled = currentIndex < sortedPages.lastIndex,
                 shape = CircleShape,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
             ) {
                 Text("下一页 ›", style = MaterialTheme.typography.labelSmall)
@@ -1198,13 +1151,12 @@ private fun StoryPagesComponent(
                 modifier = Modifier.padding(top = 2.dp)
             )
         } else {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = {
                     onResetState()
                     onGenerate()
                 },
                 shape = CircleShape,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                 modifier = Modifier
                     .align(Alignment.End)
@@ -1339,11 +1291,6 @@ private fun StoryIllustrationCard(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (bitmap != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-            else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Box(
@@ -1399,7 +1346,6 @@ private fun StoryIllustrationCard(
                         Surface(
                             shape = CircleShape,
                             color = DeepNightScrim.copy(alpha = 0.7f),
-                            border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.35f)),
                             modifier = Modifier.clickable { showCoverMenu = true }
                         ) {
                             Row(
@@ -1482,10 +1428,9 @@ private fun StoryIllustrationCard(
                                 Text(text = "📷 相册选图", style = MaterialTheme.typography.labelLarge)
                             }
 
-                            OutlinedButton(
+                            FilledTonalButton(
                                 onClick = onGenerateAiCover,
                                 shape = CircleShape,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp)
                             ) {
                                 Text(

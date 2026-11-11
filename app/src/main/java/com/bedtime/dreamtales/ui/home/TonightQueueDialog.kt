@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.home
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,11 +19,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -97,11 +96,10 @@ fun TonightQueueDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         itemsIndexed(stories, key = { _, story -> story.id }) { index, story ->
-                            OutlinedCard(
+                            Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.small,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                            ) {
+) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -177,11 +175,10 @@ fun TonightQueueDialog(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = onClear,
                         shape = CircleShape,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(
+                        colors = ButtonDefaults.filledTonalButtonColors(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
@@ -204,7 +201,7 @@ fun TonightQueueDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = CircleShape) {
+            FilledTonalButton(onClick = onDismiss, shape = CircleShape) {
                 Text("稍后", style = MaterialTheme.typography.labelLarge)
             }
         }

@@ -3,7 +3,6 @@ package com.bedtime.dreamtales.ui.home
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,9 +32,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -46,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -101,7 +101,7 @@ fun AddStoryDialog(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // 1. 核心神技：从剪贴板一键智能识别粘贴
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clip = clipboard.primaryClip
@@ -127,11 +127,10 @@ fun AddStoryDialog(
                     },
                     shape = CircleShape,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                         contentColor = MaterialTheme.colorScheme.primary
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
                 ) {
                     Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -169,8 +168,10 @@ fun AddStoryDialog(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            disabledBorderColor = Color.Transparent,
+                            errorBorderColor = Color.Transparent
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -210,13 +211,6 @@ fun AddStoryDialog(
                                         if (isSelected) MaterialTheme.colorScheme.primaryContainer
                                         else MaterialTheme.colorScheme.surfaceContainer
                                     )
-                                    .border(
-                                        BorderStroke(
-                                            1.dp,
-                                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                        ),
-                                        CircleShape
-                                    )
                                     .clickable { selectedEmoji = emoji },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -249,13 +243,7 @@ fun AddStoryDialog(
                                     selectedContainerColor = MaterialTheme.colorScheme.primary,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                                 ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled = true,
-                                    selected = isSelected,
-                                    borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    selectedBorderColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
+                                                                border = null)
                         }
                     }
                 }
@@ -304,8 +292,10 @@ fun AddStoryDialog(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            disabledBorderColor = Color.Transparent,
+                            errorBorderColor = Color.Transparent
                         )
                     )
                 }
@@ -344,7 +334,7 @@ fun AddStoryDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = CircleShape) {
+            FilledTonalButton(onClick = onDismiss, shape = CircleShape) {
                 Text("取消", style = MaterialTheme.typography.labelLarge)
             }
         }

@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.player
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,7 +103,8 @@ fun AmbientSoundDialog(
                             colors = SuggestionChipDefaults.suggestionChipColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                 labelColor = MaterialTheme.colorScheme.onSurface
-                            )
+                            ),
+                            border = null
                         )
                     }
                     items(allPresets, key = { it.name }) { preset ->
@@ -117,7 +118,8 @@ fun AmbientSoundDialog(
                             colors = SuggestionChipDefaults.suggestionChipColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
                                 labelColor = MaterialTheme.colorScheme.primary
-                            )
+                            ),
+                            border = null
                         )
                     }
                 }
@@ -134,11 +136,6 @@ fun AmbientSoundDialog(
                             } else {
                                 MaterialTheme.colorScheme.surfaceContainer
                             }
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            else MaterialTheme.colorScheme.outlineVariant
                         )
                     ) {
                         Column(
@@ -215,8 +212,7 @@ fun AmbientSoundDialog(
                     shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -255,8 +251,10 @@ fun AmbientSoundDialog(
                                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    disabledBorderColor = Color.Transparent,
+                                    errorBorderColor = Color.Transparent
                                 ),
                                 modifier = Modifier.weight(1f)
                             )
