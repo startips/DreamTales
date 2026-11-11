@@ -180,7 +180,7 @@ fun ChildProfileDialog(
             FilledTonalButton(
                 onClick = onDismiss,
                 shape = CircleShape,
-) {
+            ) {
                 Text("取消", style = MaterialTheme.typography.labelLarge)
             }
         }

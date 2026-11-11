@@ -1,12 +1,17 @@
 package com.bedtime.dreamtales.ui.home
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
@@ -15,7 +20,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,8 +71,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -107,11 +109,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.bedtime.dreamtales.core.StoryPersonalization
+import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
 import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
 import com.bedtime.dreamtales.data.api.StoryCandidate
@@ -157,6 +160,16 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted && BedtimeReminderScheduler.canPostNotifications(context)) {
+            viewModel.setBedtimeReminder(viewModel.bedtimeReminder.value.copy(enabled = true))
+        } else {
+            Toast.makeText(context, "需要通知权限才能收到晚安提醒", Toast.LENGTH_LONG).show()
+        }
+    }
 
     val stories by viewModel.stories.collectAsState()
     val defaultVoice by viewModel.defaultVoice.collectAsState()
@@ -742,9 +755,9 @@ fun HomeScreen(
                                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                                         labelColor = MaterialTheme.colorScheme.primary
                                     ),
-                                                                        border = null)
+                                    border = null)
                             }
-                            items(recommendedStories) { tag ->
+                            items(recommendedStories, key = { it }) { tag ->
                                 SuggestionChip(
                                     onClick = {
                                         focusManager.clearFocus()
@@ -759,7 +772,7 @@ fun HomeScreen(
                                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                         labelColor = MaterialTheme.colorScheme.onSurface
                                     ),
-                                                                        border = null)
+                                    border = null)
                             }
                         }
 
@@ -1269,7 +1282,36 @@ fun HomeScreen(
             sleepReport = sleepReport,
             bedtimeReminder = bedtimeReminder,
             onToggleBedtimeReminder = { enabled ->
-                viewModel.setBedtimeReminder(bedtimeReminder.copy(enabled = enabled))
+                if (!enabled) {
+                    viewModel.setBedtimeReminder(bedtimeReminder.copy(enabled = false))
+                } else {
+                    val permissionGranted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    when {
+                        !permissionGranted -> {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        !BedtimeReminderScheduler.canPostNotifications(context) -> {
+                            Toast.makeText(
+                                context,
+                                "月眠的通知已被系统关闭，请先开启通知",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    }
+                                )
+                            }
+                        }
+                        else -> {
+                            viewModel.setBedtimeReminder(bedtimeReminder.copy(enabled = true))
+                        }
+                    }
+                }
             },
             onOpenBedtimeReminderTime = {
                 showSettingsDialog = false
@@ -1551,7 +1593,7 @@ fun HomeScreen(
         ModalBottomSheet(
             onDismissRequest = { showVoiceSheet = false },
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(
@@ -1883,9 +1925,8 @@ private fun CandidateStoryCard(
     onSelect: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect() },
+        onClick = onSelect,
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -2240,10 +2281,10 @@ private fun BottomMiniPlayer(
     }
 
     Card(
+        onClick = onCardClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .clickable { onCardClick() },
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -2304,11 +2345,19 @@ private fun BottomMiniPlayer(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
+                    val isAmbient = playbackState.isAmbientOnly
                     val timerText = if (playbackState.isTimerActive && playbackState.remainingTimerSeconds > 0) {
+                        val label = if (isAmbient) "🌿 声景倒计时" else "🌙 伴读倒计时"
                         if (playbackState.isPlaying) {
-                            "🌙 伴读倒计时 ${formatSeconds(playbackState.remainingTimerSeconds)} · 轻点展开"
+                            "$label ${formatSeconds(playbackState.remainingTimerSeconds)} · 轻点展开"
                         } else {
                             "⏸️ 倒计时已暂停 (${formatSeconds(playbackState.remainingTimerSeconds)}) · 轻点展开"
+                        }
+                    } else if (isAmbient) {
+                        if (playbackState.isPlaying) {
+                            "🌿 月眠声景 · 轻点展开"
+                        } else {
+                            "🌿 声景已暂停 · 轻点展开"
                         }
                     } else if (playbackState.isPlaying) {
                         "正在伴读播放 (${playbackState.playbackMode.title}) · 轻点展开"

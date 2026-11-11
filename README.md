@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/splash.png?v=221" width="190" alt="月眠开屏" />
+<img src="docs/images/splash.png?v=222" width="190" alt="月眠开屏" />
 
 # 🌙 月眠 DreamTales
 
@@ -30,7 +30,7 @@
 
 | 首页 · 暖夜 | 首页 · 绘本米黄 | 沉浸式播放 | 关于 |
 | :---: | :---: | :---: | :---: |
-| <img src="docs/images/home-night.png?v=221" width="180" alt="首页夜间" /> | <img src="docs/images/home-day.png?v=221" width="180" alt="首页日间" /> | <img src="docs/images/player.png?v=221" width="180" alt="播放页" /> | <img src="docs/images/about.png?v=221" width="180" alt="关于页" /> |
+| <img src="docs/images/home-night.png?v=222" width="180" alt="首页夜间" /> | <img src="docs/images/home-day.png?v=222" width="180" alt="首页日间" /> | <img src="docs/images/player.png?v=222" width="180" alt="播放页" /> | <img src="docs/images/about.png?v=222" width="180" alt="关于页" /> |
 
 ## ✨ 核心功能
 

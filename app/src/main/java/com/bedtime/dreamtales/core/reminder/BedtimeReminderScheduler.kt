@@ -72,17 +72,29 @@ object BedtimeReminderScheduler {
         pendingIntent.cancel()
     }
 
-    fun showNotification(context: Context) {
-        ensureChannel(context)
-
-        // Android 13+ 通知权限被拒绝时静默跳过，提醒闹钟本身仍然保留
+    /**
+     * 提醒开关打开前先确认通知链路可用，避免界面显示“已开启”但到点静默无通知。
+     */
+    fun canPostNotifications(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            return false
         }
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return false
+        }
+        val channel = context.getSystemService(NotificationManager::class.java)
+            ?.getNotificationChannel(CHANNEL_ID)
+        return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    fun showNotification(context: Context) {
+        ensureChannel(context)
+
+        // Android 13+ 通知权限被拒绝或通知被系统关闭时静默跳过，提醒闹钟本身仍然保留
+        if (!canPostNotifications(context)) {
             return
         }
 

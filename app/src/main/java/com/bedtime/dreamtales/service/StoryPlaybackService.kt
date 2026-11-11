@@ -124,6 +124,7 @@ class StoryPlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var sleepTimerJob: Job? = null
     private var progressTrackingJob: Job? = null
+    private var manualSkipJob: Job? = null
 
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val storyRepository by lazy { StoryRepository(applicationContext) }
@@ -137,6 +138,7 @@ class StoryPlaybackService : MediaSessionService() {
     private var basePlaybackSpeed: Float = PlaybackSpeedPolicy.DEFAULT_SPEED
     private var fadeSpeedMultiplier: Float = 1.0f
     private var lastProgressSaveAt: Long = 0L
+    private var ambientPausedForEmptyMix = false
 
     // 睡前陪伴会话统计
     private var sessionStoryId: Long = 0L
@@ -185,7 +187,9 @@ class StoryPlaybackService : MediaSessionService() {
         ): MediaSession.ConnectionResult {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
                 .buildUpon()
-                .add(toggleFavoriteCommand)
+                .apply {
+                    if (!playbackState.value.isAmbientOnly) add(toggleFavoriteCommand)
+                }
                 .build()
             return MediaSession.ConnectionResult.accept(
                 sessionCommands,
@@ -249,6 +253,7 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     private fun buildSessionCustomLayout(): List<CommandButton> {
+        if (playbackState.value.isAmbientOnly) return emptyList()
         val heartIcon = if (currentStoryFavorite) {
             CommandButton.ICON_HEART_FILLED
         } else {
@@ -271,7 +276,9 @@ class StoryPlaybackService : MediaSessionService() {
         val controller = session.mediaNotificationControllerInfo ?: return
         val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
             .buildUpon()
-            .add(toggleFavoriteCommand)
+            .apply {
+                if (!playbackState.value.isAmbientOnly) add(toggleFavoriteCommand)
+            }
             .build()
         runCatching {
             session.setAvailableCommands(
@@ -411,10 +418,10 @@ class StoryPlaybackService : MediaSessionService() {
                     .build()
             }
 
-            override fun hasNext(): Boolean = true
-            override fun hasPrevious(): Boolean = true
-            override fun hasNextMediaItem(): Boolean = true
-            override fun hasPreviousMediaItem(): Boolean = true
+            override fun hasNext(): Boolean = !StoryPlaybackService.playbackState.value.isAmbientOnly
+            override fun hasPrevious(): Boolean = !StoryPlaybackService.playbackState.value.isAmbientOnly
+            override fun hasNextMediaItem(): Boolean = !StoryPlaybackService.playbackState.value.isAmbientOnly
+            override fun hasPreviousMediaItem(): Boolean = !StoryPlaybackService.playbackState.value.isAmbientOnly
             override fun seekToNext() = playNext()
             override fun seekToNextMediaItem() = playNext()
             override fun seekToPrevious() = playPrevious()
@@ -505,6 +512,7 @@ class StoryPlaybackService : MediaSessionService() {
 
         fadeMultiplier = 1.0f
         fadeSpeedMultiplier = 1.0f
+        ambientPausedForEmptyMix = false
         exoPlayer.volume = 1.0f
         applyPlaybackSpeed()
         applyAmbientVolume()
@@ -592,6 +600,7 @@ class StoryPlaybackService : MediaSessionService() {
 
         fadeMultiplier = 1.0f
         fadeSpeedMultiplier = 1.0f
+        ambientPausedForEmptyMix = false
         exoPlayer.volume = 1.0f
         applyPlaybackSpeed()
         exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
@@ -670,6 +679,8 @@ class StoryPlaybackService : MediaSessionService() {
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
         } else {
+            // 纯声景没有选择任何音轨时，不启动无意义的静音循环
+            if (playbackState.value.isAmbientOnly && playbackState.value.ambientMix.isEmpty()) return
             resetFadeIfTimerFinished()
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0L)
@@ -822,6 +833,26 @@ class StoryPlaybackService : MediaSessionService() {
         if (persist) {
             appConfig.setAmbientMix(safeMix)
         }
+
+        // 纯声景模式下清空全部音轨：停止静音载体与唤醒锁，避免后台空转。
+        if (playbackState.value.isAmbientOnly) {
+            if (safeMix.isEmpty()) {
+                ambientPausedForEmptyMix = true
+                if (exoPlayer.isPlaying) exoPlayer.pause()
+                pauseAmbientPlayers()
+                releaseWakeLock()
+                updateState { it.copy(isPlaying = false) }
+                updateNotification("月眠声景", isPlaying = false)
+            } else if (ambientPausedForEmptyMix) {
+                ambientPausedForEmptyMix = false
+                resetFadeIfTimerFinished()
+                if (exoPlayer.playbackState != Player.STATE_IDLE) {
+                    exoPlayer.play()
+                }
+                updateState { it.copy(isPlaying = true) }
+                updateNotification("月眠声景", isPlaying = true)
+            }
+        }
     }
 
     private fun createAmbientPlayer(): ExoPlayer {
@@ -867,7 +898,8 @@ class StoryPlaybackService : MediaSessionService() {
         if (current.playbackMode == PlaybackMode.SHUFFLE) {
             playRandomStory()
         } else {
-            playNextStoryInSequence()
+            // 手动切歌立即响应，不再等待自动连播的 1.5 秒呼吸间隔
+            playNextStoryInSequence(immediate = true)
         }
     }
 
@@ -916,7 +948,8 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     private fun playRandomStory() {
-        serviceScope.launch {
+        manualSkipJob?.cancel()
+        manualSkipJob = serviceScope.launch {
             val current = playbackState.value
             val queueIds = queueRepository.getStoryIdsSync()
             val inQueue = PlaybackQueuePolicy.indexOf(queueIds, current.storyId) >= 0
@@ -940,7 +973,8 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     private fun playPreviousStoryInSequence() {
-        serviceScope.launch {
+        manualSkipJob?.cancel()
+        manualSkipJob = serviceScope.launch {
             val queue = queueSnapshot()
             if (queue != null) {
                 val (ids, index) = queue
@@ -1020,9 +1054,10 @@ class StoryPlaybackService : MediaSessionService() {
         }
     }
 
-    private fun playNextStoryInSequence() {
-        serviceScope.launch {
-            delay(1500L) // 睡前呼吸间隔 1.5 秒
+    private fun playNextStoryInSequence(immediate: Boolean = false) {
+        manualSkipJob?.cancel()
+        manualSkipJob = serviceScope.launch {
+            if (!immediate) delay(1500L) // 自然播完后的睡前呼吸间隔
 
             val queue = queueSnapshot()
             if (queue != null) {

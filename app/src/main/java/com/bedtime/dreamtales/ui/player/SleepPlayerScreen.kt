@@ -273,7 +273,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                                                        border = null)
+                            border = null)
 
                         Spacer(modifier = Modifier.width(10.dp))
 
@@ -288,7 +288,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                                                        border = null)
+                            border = null)
 
                         Spacer(modifier = Modifier.width(10.dp))
 
@@ -303,7 +303,7 @@ fun SleepPlayerScreen(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             ),
-                                                        border = null)
+                            border = null)
                     }
                 }
 
@@ -380,7 +380,7 @@ fun SleepPlayerScreen(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-) {
+                        ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -821,7 +821,7 @@ private fun AmbientOnlyPlayerContent(
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-) {
+            ) {
                 Text(
                     text = trackText.ifBlank { "还没有选择声景，点下方「助眠背景」添加" },
                     style = MaterialTheme.typography.bodySmall,
@@ -1221,7 +1221,7 @@ private fun StoryLyricsComponent(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        itemsIndexed(sentenceList) { index, item ->
+        itemsIndexed(sentenceList, key = { index, _ -> index }) { index, item ->
             val isCurrent = (index == activeIndex)
             val isPast = (index < activeIndex)
 

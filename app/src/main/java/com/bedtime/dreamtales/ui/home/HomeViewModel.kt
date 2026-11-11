@@ -348,8 +348,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // 手动点播其他故事时，清空「今晚故事单」，避免播完后又跳回队列造成困惑。
-        if (!preserveQueue) {
+        // 手动点播队列之外的故事时才清空「今晚故事单」；
+        // 续播/点播仍在故事单里的故事时保留整个队列。
+        val keepQueue = preserveQueue || tonightQueue.value.any { it.id == story.id }
+        if (!keepQueue) {
             viewModelScope.launch { queueRepository.clear() }
         }
 

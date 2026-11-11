@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -72,17 +71,16 @@ fun BedtimeReminderDialog(
                 presets.forEach { (hour, minute) ->
                     val isSelected = current.hour == hour && current.minute == minute
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onSave(
-                                    current.copy(
-                                        enabled = true,
-                                        hour = hour,
-                                        minute = minute
-                                    )
+                        onClick = {
+                            onSave(
+                                current.copy(
+                                    enabled = true,
+                                    hour = hour,
+                                    minute = minute
                                 )
-                            },
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) {

@@ -290,7 +290,7 @@ private fun FeatureChip(text: String) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-) {
+    ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

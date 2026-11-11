@@ -99,7 +99,7 @@ fun TonightQueueDialog(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.small,
-) {
+                            ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
