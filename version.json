@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.3.1",
-  "name": "v2.3.1",
-  "versionName": "2.3.1",
-  "versionCode": 17,
-  "body": "月眠 2.3.1 · 故事处方与离线管理\n\n- **情绪/场景故事处方包**：新增怕黑独睡、入园适应、生病吃药、分离焦虑、二胎分享、情绪小火苗 6 个主题包，内置 18 篇离线可读故事，并支持结合当前宝宝档案一键 AI 定制\n- **可视化离线缓存管理**：设置页升级离线管理入口，可查看每篇故事的离线状态、占用大小与设备剩余空间，支持单篇下载/清理、「仅 Wi-Fi 批量下载」开关与可随时停止的批量下载\n- **精简交互**：移除播放页多余的应用内儿童锁，日常防误触直接交给系统锁屏与翻转扣屏",
-  "published_at": "2026-11-12T12:15:58Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.1/DreamTales-v2.3.1.apk",
-  "apkName": "DreamTales-v2.3.1.apk",
-  "apkSizeBytes": 18235356,
+  "tag_name": "v2.3.2",
+  "name": "v2.3.2",
+  "versionName": "2.3.2",
+  "versionCode": 18,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.1...v2.3.2",
+  "published_at": "2026-11-12T15:02:14Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.2/DreamTales-v2.3.2.apk",
+  "apkName": "DreamTales-v2.3.2.apk",
+  "apkSizeBytes": 18251740,
   "assets": [
     {
-      "name": "DreamTales-v2.3.1.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.1/DreamTales-v2.3.1.apk",
-      "size": 18235356
+      "name": "DreamTales-v2.3.2.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.2/DreamTales-v2.3.2.apk",
+      "size": 18251740
     }
   ]
 }
