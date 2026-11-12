@@ -45,7 +45,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -134,7 +133,6 @@ fun SleepPlayerScreen(
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
-    var isChildLocked by remember { mutableStateOf(false) }
     var coverGenerationError by remember { mutableStateOf<String?>(null) }
 
     // 原生无权限相册图片选择器（免敏感权限、零打扰）
@@ -171,9 +169,8 @@ fun SleepPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // 双指轻点屏幕任意位置触发播放/暂停（儿童锁启用时屏蔽）
-            .pointerInput(isChildLocked) {
-                if (isChildLocked) return@pointerInput
+            // 双指轻点屏幕任意位置触发播放/暂停（盲操无惊扰）
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var twoFingersDetected = false
@@ -211,23 +208,6 @@ fun SleepPlayerScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回文库",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                showAmbientSheet = false
-                                showTimerDialog = false
-                                showSpeedMenu = false
-                                isChildLocked = true
-                            },
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LockOpen,
-                                contentDescription = "开启儿童锁",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -766,14 +746,6 @@ fun SleepPlayerScreen(
                         Text("我知道了", style = MaterialTheme.typography.labelLarge)
                     }
                 }
-            )
-        }
-
-        // 儿童锁柔暗防误触遮罩（翻转扣屏遮罩优先级更高）
-        if (isChildLocked) {
-            ChildLockOverlay(
-                playbackState = playbackState,
-                onUnlock = { isChildLocked = false }
             )
         }
 

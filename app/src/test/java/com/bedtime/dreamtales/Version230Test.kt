@@ -4,7 +4,6 @@ import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.image.BitmapSampleCalculator
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.model.ChildProfilePolicy
-import com.bedtime.dreamtales.core.playback.ChildLockPolicy
 import com.bedtime.dreamtales.core.stats.SleepSessionSnapshot
 import com.bedtime.dreamtales.core.stats.SleepStatsCalculator
 import org.junit.Assert.assertEquals
@@ -16,22 +15,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class Version230Test {
-
-    // ---------------- 儿童锁策略 ----------------
-
-    @Test
-    fun testChildLockProgressAndUnlockThreshold() {
-        assertEquals(0f, ChildLockPolicy.progressFraction(-100L), 0.0001f)
-        assertEquals(0f, ChildLockPolicy.progressFraction(0L), 0.0001f)
-        assertEquals(0.5f, ChildLockPolicy.progressFraction(1_250L), 0.0001f)
-        assertEquals(1.0f, ChildLockPolicy.progressFraction(2_500L), 0.0001f)
-        assertEquals(1.0f, ChildLockPolicy.progressFraction(5_000L), 0.0001f)
-
-        assertFalse(ChildLockPolicy.isUnlocked(0L))
-        assertFalse(ChildLockPolicy.isUnlocked(2_499L))
-        assertTrue(ChildLockPolicy.isUnlocked(2_500L))
-        assertTrue(ChildLockPolicy.isUnlocked(3_000L))
-    }
 
     // ---------------- 多宝宝档案 ----------------
 

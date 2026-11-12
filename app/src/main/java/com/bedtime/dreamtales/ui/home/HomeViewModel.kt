@@ -3,12 +3,16 @@ package com.bedtime.dreamtales.ui.home
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bedtime.dreamtales.core.audio.OfflineCacheCalculator
 import com.bedtime.dreamtales.core.constants.AppConfig
 import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.network.BatchDownloadPermission
+import com.bedtime.dreamtales.core.network.NetworkDownloadPolicy
 import com.bedtime.dreamtales.core.playback.PlaybackResumePolicy
 import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
 import com.bedtime.dreamtales.core.reminder.BedtimeReminderSettings
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
+import com.bedtime.dreamtales.core.story.CuratedPackStory
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
@@ -84,6 +88,15 @@ data class HomePlaybackSummary(
     val hasActiveSession: Boolean = false,
     val isPlaying: Boolean = false,
     val isAmbientOnly: Boolean = false
+)
+
+data class BatchDownloadState(
+    val isRunning: Boolean = false,
+    val totalCount: Int = 0,
+    val completedCount: Int = 0,
+    val currentStoryTitle: String = "",
+    val downloadingStoryId: Long? = null,
+    val errorMessage: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -198,12 +211,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 缓存统计与状态
+    // 缓存统计与离线管理状态
     private val _cacheSizeMb = MutableStateFlow(0.0f)
     val cacheSizeMb: StateFlow<Float> = _cacheSizeMb.asStateFlow()
 
     private val _cacheCount = MutableStateFlow(0)
     val cacheCount: StateFlow<Int> = _cacheCount.asStateFlow()
+
+    private val _deviceFreeSpaceMb = MutableStateFlow(0.0f)
+    val deviceFreeSpaceMb: StateFlow<Float> = _deviceFreeSpaceMb.asStateFlow()
+
+    private val _wifiOnlyDownload = MutableStateFlow(appConfig.getWifiOnlyDownload())
+    val wifiOnlyDownload: StateFlow<Boolean> = _wifiOnlyDownload.asStateFlow()
+
+    private val _batchDownloadState = MutableStateFlow(BatchDownloadState())
+    val batchDownloadState: StateFlow<BatchDownloadState> = _batchDownloadState.asStateFlow()
+
+    private var batchDownloadJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -323,11 +347,147 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val bytes = storyRepository.getAudioCacheSizeBytes()
             _cacheSizeMb.value = bytes / (1024f * 1024f)
             _cacheCount.value = storyRepository.getAudioCacheCount()
+            _deviceFreeSpaceMb.value = storyRepository.getDeviceFreeSpaceMb()
+        }
+    }
+
+    fun setWifiOnlyDownload(enabled: Boolean) {
+        appConfig.setWifiOnlyDownload(enabled)
+        _wifiOnlyDownload.value = enabled
+    }
+
+    fun clearBatchDownloadError() {
+        _batchDownloadState.value = _batchDownloadState.value.copy(errorMessage = null)
+    }
+
+    fun cancelBatchDownload() {
+        batchDownloadJob?.cancel()
+        batchDownloadJob = null
+        _batchDownloadState.value = BatchDownloadState()
+    }
+
+    fun startBatchDownload(favoritesOnly: Boolean) {
+        if (_batchDownloadState.value.isRunning) return
+        val voice = defaultVoice.value
+        if (voice == null) {
+            _batchDownloadState.value = BatchDownloadState(errorMessage = "请先选择或录制一个伴读音色")
+            return
+        }
+
+        when (NetworkDownloadPolicy.checkCurrentNetwork(getApplication(), _wifiOnlyDownload.value)) {
+            BatchDownloadPermission.OFFLINE -> {
+                _batchDownloadState.value = BatchDownloadState(errorMessage = "当前无网络连接，请联网后再试")
+                return
+            }
+            BatchDownloadPermission.CELLULAR_BLOCKED -> {
+                _batchDownloadState.value = BatchDownloadState(errorMessage = "已开启「仅 Wi-Fi 批量下载」，请连接 Wi-Fi 或关闭限制")
+                return
+            }
+            BatchDownloadPermission.ALLOWED -> Unit
+        }
+
+        val items = OfflineCacheCalculator.buildItems(
+            stories = stories.value,
+            completeCaches = completedCaches.value,
+            voiceProfileId = voice.id,
+            fileSizeProvider = { path -> File(path).takeIf { it.exists() }?.length() ?: 0L }
+        )
+        val pending = OfflineCacheCalculator.pendingForBatch(items, favoritesOnly)
+        if (pending.isEmpty()) {
+            _batchDownloadState.value = BatchDownloadState(
+                errorMessage = if (favoritesOnly) "收藏的故事都已离线就绪啦" else "全部故事都已离线就绪啦"
+            )
+            return
+        }
+
+        batchDownloadJob?.cancel()
+        batchDownloadJob = viewModelScope.launch {
+            _batchDownloadState.value = BatchDownloadState(
+                isRunning = true,
+                totalCount = pending.size,
+                completedCount = 0,
+                currentStoryTitle = pending.first().title,
+                downloadingStoryId = pending.first().id
+            )
+            var done = 0
+            try {
+                for (story in pending) {
+                    _batchDownloadState.value = _batchDownloadState.value.copy(
+                        currentStoryTitle = story.title,
+                        downloadingStoryId = story.id
+                    )
+                    storyRepository.getOrSynthesizeStoryAudio(story, voice)
+                    done++
+                    _batchDownloadState.value = _batchDownloadState.value.copy(completedCount = done)
+                    refreshCacheInfo()
+                }
+                _batchDownloadState.value = BatchDownloadState()
+            } catch (e: CancellationException) {
+                _batchDownloadState.value = BatchDownloadState()
+                throw e
+            } catch (e: Exception) {
+                _batchDownloadState.value = BatchDownloadState(
+                    errorMessage = getFriendlyErrorMessage(e, "批量下载中断（已完成 $done/${pending.size} 篇）")
+                )
+            }
+        }
+    }
+
+    fun downloadSingleStoryCache(story: Story) {
+        if (_batchDownloadState.value.isRunning) return
+        val voice = defaultVoice.value ?: run {
+            _batchDownloadState.value = BatchDownloadState(errorMessage = "请先选择或录制一个伴读音色")
+            return
+        }
+        if (NetworkDownloadPolicy.checkCurrentNetwork(getApplication(), wifiOnly = false) == BatchDownloadPermission.OFFLINE) {
+            _batchDownloadState.value = BatchDownloadState(errorMessage = "当前无网络连接，无法合成音频")
+            return
+        }
+
+        batchDownloadJob?.cancel()
+        batchDownloadJob = viewModelScope.launch {
+            _batchDownloadState.value = BatchDownloadState(
+                isRunning = true,
+                totalCount = 1,
+                completedCount = 0,
+                currentStoryTitle = story.title,
+                downloadingStoryId = story.id
+            )
+            try {
+                storyRepository.getOrSynthesizeStoryAudio(story, voice)
+                refreshCacheInfo()
+                _batchDownloadState.value = BatchDownloadState()
+            } catch (e: CancellationException) {
+                _batchDownloadState.value = BatchDownloadState()
+                throw e
+            } catch (e: Exception) {
+                _batchDownloadState.value = BatchDownloadState(
+                    errorMessage = getFriendlyErrorMessage(e, "下载《${story.title}》失败")
+                )
+            }
+        }
+    }
+
+    fun deleteSingleStoryCache(
+        story: Story,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val voice = defaultVoice.value ?: return
+        val activePlayback = playbackSummary.value
+        if (activePlayback.isPlaying && activePlayback.storyId == story.id) {
+            onResult(false, "正在播放《${story.title}》，请先暂停再删除缓存")
+            return
+        }
+        viewModelScope.launch {
+            val ok = storyRepository.deleteAudioCacheForStory(story.id, voice.id)
+            refreshCacheInfo()
+            onResult(ok, if (ok) "已清理《${story.title}》的离线音频" else "清理缓存失败")
         }
     }
 
     fun clearAudioCaches(onCleared: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
+            cancelBatchDownload()
             val success = storyRepository.clearAllAudioCaches()
             refreshCacheInfo()
             onCleared(success)
@@ -529,17 +689,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var lastQuery: String = ""
     private var lastCandidates: List<StoryCandidate> = emptyList()
+    private var pendingPackContext: String = ""
 
     /**
      * 搜索故事：先检索推荐 3 个候选故事卡片供二次点选
      */
-    fun searchStoryCandidates(query: String) {
+    fun searchStoryCandidates(query: String, packContext: String = "") {
         if (query.isBlank()) return
         lastQuery = query.trim()
+        pendingPackContext = packContext
         viewModelScope.launch {
             _generationState.value = StoryGenerationUiState.SearchingCandidates(lastQuery)
             try {
-                val candidates = storyRepository.searchStoryCandidatesWithCpa(lastQuery)
+                val candidates = storyRepository.searchStoryCandidatesWithCpa(lastQuery, pendingPackContext)
                 lastCandidates = candidates
                 _generationState.value = StoryGenerationUiState.CandidatesReady(lastQuery, candidates)
             } catch (e: Exception) {
@@ -555,11 +717,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _generationState.value = StoryGenerationUiState.GeneratingStory(candidate.title)
             try {
-                val draft = storyRepository.generateStoryDraftFromCandidate(candidate)
+                val draft = storyRepository.generateStoryDraftFromCandidate(candidate, pendingPackContext)
                 _generationState.value = StoryGenerationUiState.PreviewDraft(draft)
             } catch (e: Exception) {
                 _generationState.value = StoryGenerationUiState.Error(getFriendlyErrorMessage(e, "生成故事正文失败"))
             }
+        }
+    }
+
+    fun collectAndPlayPackStory(
+        packTitle: String,
+        sample: CuratedPackStory,
+        onNavigateToPlayer: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val story = storyRepository.addStoryFromPackIfMissing(packTitle, sample)
+            DreamTalesWidgetProvider.refresh(getApplication())
+            onStoryClicked(story, onNavigateToPlayer)
         }
     }
 

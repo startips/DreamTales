@@ -113,8 +113,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.bedtime.dreamtales.core.audio.OfflineCacheCalculator
 import com.bedtime.dreamtales.core.image.rememberCoverBitmap
 import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
+import com.bedtime.dreamtales.core.story.CuratedPackStory
+import com.bedtime.dreamtales.core.story.StoryPack
+import com.bedtime.dreamtales.core.story.StoryPackCatalog
 import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
 import com.bedtime.dreamtales.data.api.StoryCandidate
@@ -131,6 +135,7 @@ import com.bedtime.dreamtales.ui.settings.ChildProfileDialog
 import com.bedtime.dreamtales.ui.settings.ExportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.ImportStoriesDialog
 import com.bedtime.dreamtales.ui.settings.LanShareDialog
+import com.bedtime.dreamtales.ui.settings.OfflineManagerDialog
 import com.bedtime.dreamtales.ui.settings.SettingsDialog
 import com.bedtime.dreamtales.ui.settings.SleepReportDialog
 import com.bedtime.dreamtales.ui.update.DownloadProgressDialog
@@ -203,9 +208,13 @@ fun HomeScreen(
     val filteredAndSortedStories by viewModel.filteredAndSortedStories.collectAsState()
     val cacheSizeMb by viewModel.cacheSizeMb.collectAsState()
     val cacheCount by viewModel.cacheCount.collectAsState()
+    val deviceFreeSpaceMb by viewModel.deviceFreeSpaceMb.collectAsState()
+    val wifiOnlyDownload by viewModel.wifiOnlyDownload.collectAsState()
+    val batchDownloadState by viewModel.batchDownloadState.collectAsState()
 
     var showVoiceSheet by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showOfflineManagerDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
@@ -218,6 +227,8 @@ fun HomeScreen(
     var showLanShareDialog by remember { mutableStateOf(false) }
     var showTonightQueueDialog by remember { mutableStateOf(false) }
     var showBedtimeReminderDialog by remember { mutableStateOf(false) }
+    var selectedStoryPack by remember { mutableStateOf<StoryPack?>(null) }
+    var selectedPackSampleToRead by remember { mutableStateOf<Pair<StoryPack, CuratedPackStory>?>(null) }
 
     // 桌面小组件一键伴读：等故事库与音色加载完成后自动点播
     LaunchedEffect(pendingWidgetStoryId, stories, defaultVoice) {
@@ -1067,6 +1078,68 @@ fun HomeScreen(
                 }
             }
 
+            // 1.8 情绪/场景故事处方包（怕黑、入园、吃药、思念、二胎、情绪）
+            item(key = "story_packs_section") {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🩺 故事处方 · 按场景安抚",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${StoryPackCatalog.ALL_PACKS.size} 个主题包",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(StoryPackCatalog.ALL_PACKS, key = { it.id }) { pack ->
+                            Card(
+                                onClick = { selectedStoryPack = pack },
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ),
+                                modifier = Modifier.width(146.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(text = pack.emoji, fontSize = 20.sp)
+                                    Text(
+                                        text = pack.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = pack.sceneLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 2. 故事文库表头与多维排序气泡 + 本地故事快速搜索栏
             item(key = "story_header_and_sort_bar") {
                 Column(
@@ -1381,6 +1454,11 @@ fun HomeScreen(
             onOpenImport = {
                 showSettingsDialog = false
                 showImportDialog = true
+            },
+            onOpenOfflineManager = {
+                showSettingsDialog = false
+                viewModel.refreshCacheInfo()
+                showOfflineManagerDialog = true
             },
             onClearCacheClick = {
                 showClearCacheConfirm = true
@@ -1937,6 +2015,72 @@ fun HomeScreen(
             onDismiss = {
                 selectedStoryToRead = null
             }
+        )
+    }
+
+    // 故事处方包弹窗
+    selectedStoryPack?.let { pack ->
+        StoryPackDialog(
+            pack = pack,
+            existingStories = stories,
+            activeChild = childProfile,
+            onReadSample = { sample ->
+                selectedPackSampleToRead = pack to sample
+            },
+            onPlaySample = { sample ->
+                selectedStoryPack = null
+                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer)
+            },
+            onGenerateAiTopic = { topic, packContext ->
+                selectedStoryPack = null
+                searchQuery = topic
+                viewModel.searchStoryCandidates(topic, packContext)
+            },
+            onDismiss = { selectedStoryPack = null }
+        )
+    }
+
+    // 处方包内置故事试读弹窗
+    selectedPackSampleToRead?.let { (pack, sample) ->
+        StoryReaderDialog(
+            story = sample.toStory(pack.title),
+            onPlayClick = {
+                selectedPackSampleToRead = null
+                selectedStoryPack = null
+                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer)
+            },
+            onDismiss = { selectedPackSampleToRead = null }
+        )
+    }
+
+    // 可视化离线缓存管理弹窗
+    if (showOfflineManagerDialog) {
+        val offlineItems = remember(stories, completedCaches, defaultVoice?.id, cacheCount) {
+            OfflineCacheCalculator.buildItems(
+                stories = stories,
+                completeCaches = completedCaches,
+                voiceProfileId = defaultVoice?.id,
+                fileSizeProvider = { path -> File(path).takeIf { it.exists() }?.length() ?: 0L }
+            )
+        }
+        OfflineManagerDialog(
+            items = offlineItems,
+            voiceName = defaultVoice?.name ?: "",
+            freeSpaceMb = deviceFreeSpaceMb,
+            wifiOnly = wifiOnlyDownload,
+            batchState = batchDownloadState,
+            onToggleWifiOnly = { viewModel.setWifiOnlyDownload(it) },
+            onStartBatchDownload = { favOnly -> viewModel.startBatchDownload(favOnly) },
+            onCancelBatchDownload = { viewModel.cancelBatchDownload() },
+            onDownloadSingle = { story -> viewModel.downloadSingleStoryCache(story) },
+            onDeleteSingle = { story ->
+                viewModel.deleteSingleStoryCache(story) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onClearAllClick = { showClearCacheConfirm = true },
+            onDismissError = { viewModel.clearBatchDownloadError() },
+            onDismiss = { showOfflineManagerDialog = false }
         )
     }
 

@@ -90,6 +90,7 @@ fun SettingsDialog(
     onOpenBedtimeReminderTime: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenImport: () -> Unit,
+    onOpenOfflineManager: () -> Unit,
     onClearCacheClick: () -> Unit,
     onOpenChildProfile: () -> Unit,
     onOpenSleepReport: () -> Unit,
@@ -345,13 +346,13 @@ fun SettingsDialog(
                 }
 
                 // 2. 离线缓存管理
-                SettingSectionCard(title = "📦 音频缓存") {
+                SettingSectionCard(title = "📦 离线缓存管理") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "已占用 ${String.format("%.1f", cacheSizeMb)} MB",
                                 style = MaterialTheme.typography.titleSmall,
@@ -360,25 +361,39 @@ fun SettingsDialog(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (cacheCount > 0) "共 $cacheCount 篇故事音频" else "暂无缓存",
+                                text = if (cacheCount > 0) "共 $cacheCount 篇故事音频" else "暂无缓存，可批量提前下载",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                         }
 
-                        Button(
-                            onClick = onClearCacheClick,
-                            enabled = cacheCount > 0 || cacheSizeMb > 0.1f,
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("清理", style = MaterialTheme.typography.labelSmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilledTonalButton(
+                                onClick = onOpenOfflineManager,
+                                shape = CircleShape,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                )
+                            ) {
+                                Text("管理", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+
+                            Button(
+                                onClick = onClearCacheClick,
+                                enabled = cacheCount > 0 || cacheSizeMb > 0.1f,
+                                shape = CircleShape,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("清理", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
