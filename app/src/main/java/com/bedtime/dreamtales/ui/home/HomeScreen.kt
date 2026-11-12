@@ -639,15 +639,116 @@ fun HomeScreen(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(innerPadding)
         ) {
-            // 1. 搜索栏与候选推荐区域
-            item(key = "story_search_section") {
+            // 全局语音合成进度悬浮指示（固定在列表上方，任何滚动位置都立即可见）
+            val currentSynthesis = synthesisState
+            AnimatedVisibility(visible = currentSynthesis is SynthesisUiState.Synthesizing) {
+                val synth = currentSynthesis as? SynthesisUiState.Synthesizing
+                if (synth != null) {
+                    Card(
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { synth.progress / 100f },
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "🪄 正在生成《${synth.storyTitle}》伴读音频 (${synth.progress}%)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "首次伴读需合成音频，完成后自动离线并开播",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 批量离线下载进度悬浮指示
+            AnimatedVisibility(visible = batchDownloadState.isRunning) {
+                Card(
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.5.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "离线缓存中 (${batchDownloadState.completedCount}/${batchDownloadState.totalCount})：${batchDownloadState.currentStoryTitle}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "完成后在「离线缓存管理」可查看与管理",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = { viewModel.cancelBatchDownload() },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("停止", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 1. 搜索栏与候选推荐区域
+                item(key = "story_search_section") {
                 ElevatedCard(
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.elevatedCardColors(
@@ -1319,7 +1420,7 @@ fun HomeScreen(
                         selectedStoryToRead = story
                     },
                     onPlayClick = {
-                        viewModel.onStoryClicked(story, onNavigateToPlayer)
+                        viewModel.onStoryClicked(story, onNavigateToPlayer, autoPlay = true)
                     },
                     onToggleFavorite = {
                         viewModel.toggleFavorite(story)
@@ -1399,6 +1500,7 @@ fun HomeScreen(
                     }
                 }
             }
+        }
         }
     }
 
@@ -2010,7 +2112,7 @@ fun HomeScreen(
             onPlayClick = {
                 val storyToPlay = story
                 selectedStoryToRead = null
-                viewModel.onStoryClicked(storyToPlay, onNavigateToPlayer)
+                viewModel.onStoryClicked(storyToPlay, onNavigateToPlayer, autoPlay = true)
             },
             onDismiss = {
                 selectedStoryToRead = null
@@ -2023,13 +2125,22 @@ fun HomeScreen(
         StoryPackDialog(
             pack = pack,
             existingStories = stories,
+            completedCaches = completedCaches,
+            currentVoiceId = defaultVoice?.id,
             activeChild = childProfile,
             onReadSample = { sample ->
                 selectedPackSampleToRead = pack to sample
             },
-            onPlaySample = { sample ->
+            onPlaySample = { sample, isCached ->
                 selectedStoryPack = null
-                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer)
+                if (!isCached) {
+                    Toast.makeText(context, "首次伴读，正在为您合成音频并自动开播…", Toast.LENGTH_SHORT).show()
+                }
+                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer, autoPlay = true)
+            },
+            onPreloadPackAudio = {
+                viewModel.preloadPackStoriesAudio(pack.title, pack.curatedStories)
+                Toast.makeText(context, "已开始在后台离线本包全部音频", Toast.LENGTH_SHORT).show()
             },
             onGenerateAiTopic = { topic, packContext ->
                 selectedStoryPack = null
@@ -2047,7 +2158,7 @@ fun HomeScreen(
             onPlayClick = {
                 selectedPackSampleToRead = null
                 selectedStoryPack = null
-                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer)
+                viewModel.collectAndPlayPackStory(pack.title, sample, onNavigateToPlayer, autoPlay = true)
             },
             onDismiss = { selectedPackSampleToRead = null }
         )

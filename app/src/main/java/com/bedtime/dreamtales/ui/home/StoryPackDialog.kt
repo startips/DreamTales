@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -31,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,11 +43,14 @@ import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.story.CuratedPackStory
 import com.bedtime.dreamtales.core.story.StoryPack
+import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
 import com.bedtime.dreamtales.data.local.entity.Story
+import com.bedtime.dreamtales.data.local.entity.StoryAudioCache
 
 /**
  * 情绪/场景故事处方包弹窗：
- * - 内置 3 篇离线可读、即点即听的安抚故事；
+ * - 内置 3 篇离线可读、即点即听的安抚故事；清晰标明文本离线与音频就绪状态；
+ * - 支持一键批量预下载本包音频，并在首次伴读时提供即时合成提示；
  * - 支持结合当前宝宝档案，一键向 AI 检索并定制同场景新故事。
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -53,13 +58,30 @@ import com.bedtime.dreamtales.data.local.entity.Story
 fun StoryPackDialog(
     pack: StoryPack,
     existingStories: List<Story>,
+    completedCaches: List<StoryAudioCache>,
+    currentVoiceId: Long?,
     activeChild: ChildProfile,
     onReadSample: (CuratedPackStory) -> Unit,
-    onPlaySample: (CuratedPackStory) -> Unit,
+    onPlaySample: (CuratedPackStory, Boolean) -> Unit,
+    onPreloadPackAudio: () -> Unit,
     onGenerateAiTopic: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val existingTitles = existingStories.map { it.title.trim() }.toSet()
+    val existingByTitle = remember(existingStories) {
+        existingStories.associateBy { it.title.trim() }
+    }
+
+    val cachedStoryIds = remember(completedCaches, currentVoiceId) {
+        if (currentVoiceId == null) emptySet()
+        else completedCaches.filter { it.voiceProfileId == currentVoiceId && it.isComplete }.map { it.storyId }.toSet()
+    }
+
+    val anyUncached = remember(pack, existingByTitle, cachedStoryIds) {
+        pack.curatedStories.any { sample ->
+            val story = existingByTitle[sample.title.trim()]
+            story == null || !cachedStoryIds.contains(story.id)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -109,15 +131,25 @@ fun StoryPackDialog(
                 }
 
                 // 离线可读的处方故事列表
-                Text(
-                    text = "📖 离线处方故事（点开即读）",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "📖 处方故事（正文离线 · 点开即读）",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "文本全部内置离线；首次伴读由当前音色在线合成并缓存",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
 
                 pack.curatedStories.forEach { sample ->
-                    val inLibrary = existingTitles.contains(sample.title.trim())
+                    val existingStory = existingByTitle[sample.title.trim()]
+                    val isCached = existingStory != null && cachedStoryIds.contains(existingStory.id)
+
                     Card(
                         onClick = { onReadSample(sample) },
                         shape = MaterialTheme.shapes.medium,
@@ -143,60 +175,76 @@ fun StoryPackDialog(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = sample.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    if (inLibrary) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                                        ) {
-                                            Text(
-                                                text = "已收录",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                fontSize = 9.sp,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = sample.summary,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = sample.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isCached) MaterialTheme.colorScheme.surfaceContainerHighest
+                                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                    ) {
+                                        Text(
+                                            text = if (isCached) "已离线" else "需合成",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isCached) WarmSuccessGreen else MaterialTheme.colorScheme.primary,
+                                            fontSize = 9.sp,
+                                            fontWeight = if (isCached) FontWeight.SemiBold else FontWeight.Normal,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = sample.summary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(6.dp))
                             FilledTonalButton(
-                                onClick = { onPlaySample(sample) },
+                                onClick = { onPlaySample(sample, isCached) },
                                 shape = CircleShape,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.primary
+                                    containerColor = if (isCached) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = if (isCached) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
                                 )
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "播放",
+                                    contentDescription = if (isCached) "播放" else "伴读",
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
-                                Text("伴读", style = MaterialTheme.typography.labelSmall)
+                                Text(if (isCached) "播放" else "伴读", style = MaterialTheme.typography.labelSmall)
                             }
                         }
+                    }
+                }
+
+                if (anyUncached) {
+                    FilledTonalButton(
+                        onClick = onPreloadPackAudio,
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("提前离线本包全部音频（夜间免等待）", style = MaterialTheme.typography.labelMedium)
                     }
                 }
 

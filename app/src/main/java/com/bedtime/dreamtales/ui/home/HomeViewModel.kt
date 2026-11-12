@@ -728,12 +728,68 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun collectAndPlayPackStory(
         packTitle: String,
         sample: CuratedPackStory,
-        onNavigateToPlayer: () -> Unit
+        onNavigateToPlayer: () -> Unit,
+        autoPlay: Boolean = true
     ) {
         viewModelScope.launch {
             val story = storyRepository.addStoryFromPackIfMissing(packTitle, sample)
             DreamTalesWidgetProvider.refresh(getApplication())
-            onStoryClicked(story, onNavigateToPlayer)
+            onStoryClicked(story, onNavigateToPlayer, autoPlay = autoPlay)
+        }
+    }
+
+    fun preloadPackStoriesAudio(packTitle: String, samples: List<CuratedPackStory>) {
+        if (_batchDownloadState.value.isRunning) return
+        val voice = defaultVoice.value ?: run {
+            _synthesisState.value = SynthesisUiState.Error("请先选择或录制一个伴读音色")
+            return
+        }
+        if (NetworkDownloadPolicy.checkCurrentNetwork(getApplication(), wifiOnly = false) == BatchDownloadPermission.OFFLINE) {
+            _synthesisState.value = SynthesisUiState.Error("当前无网络连接，无法提前离线音频")
+            return
+        }
+
+        batchDownloadJob?.cancel()
+        batchDownloadJob = viewModelScope.launch {
+            val stories = samples.map { storyRepository.addStoryFromPackIfMissing(packTitle, it) }
+            DreamTalesWidgetProvider.refresh(getApplication())
+
+            val pending = stories.filter { story ->
+                val cache = completedCaches.value.find {
+                    it.storyId == story.id && it.voiceProfileId == voice.id && it.isComplete
+                }
+                cache == null || !File(cache.localFilePath).exists() || File(cache.localFilePath).length() == 0L
+            }
+            if (pending.isEmpty()) return@launch
+
+            _batchDownloadState.value = BatchDownloadState(
+                isRunning = true,
+                totalCount = pending.size,
+                completedCount = 0,
+                currentStoryTitle = pending.first().title,
+                downloadingStoryId = pending.first().id
+            )
+            var done = 0
+            try {
+                for (story in pending) {
+                    _batchDownloadState.value = _batchDownloadState.value.copy(
+                        currentStoryTitle = story.title,
+                        downloadingStoryId = story.id
+                    )
+                    storyRepository.getOrSynthesizeStoryAudio(story, voice)
+                    done++
+                    _batchDownloadState.value = _batchDownloadState.value.copy(completedCount = done)
+                    refreshCacheInfo()
+                }
+                _batchDownloadState.value = BatchDownloadState()
+            } catch (e: CancellationException) {
+                _batchDownloadState.value = BatchDownloadState()
+                throw e
+            } catch (e: Exception) {
+                _batchDownloadState.value = BatchDownloadState(
+                    errorMessage = getFriendlyErrorMessage(e, "离线处方包音频失败（已完成 $done/${pending.size} 篇）")
+                )
+            }
         }
     }
 
