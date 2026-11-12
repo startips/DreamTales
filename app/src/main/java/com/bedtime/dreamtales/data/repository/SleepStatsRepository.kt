@@ -16,9 +16,12 @@ class SleepStatsRepository(context: Context) {
 
     private val sessionDao = AppDatabase.getInstance(context).sleepSessionDao()
 
-    fun getWeeklyReportFlow(): Flow<SleepWeeklyReport> {
-        return sessionDao.getRecentFlow(limit = 120).map { sessions ->
-            SleepStatsCalculator.build(sessions.map { it.toSnapshot() })
+    fun getWeeklyReportFlow(childProfileId: Long? = null): Flow<SleepWeeklyReport> {
+        return sessionDao.getRecentFlow(limit = 300).map { sessions ->
+            SleepStatsCalculator.build(
+                sessions = sessions.map { it.toSnapshot() },
+                childProfileId = childProfileId
+            )
         }
     }
 
@@ -37,7 +40,8 @@ class SleepStatsRepository(context: Context) {
             endedAt = endedAt,
             listenedSeconds = listenedSeconds,
             estimatedSleepSeconds = estimatedSleepSeconds,
-            endedBy = endedBy
+            endedBy = endedBy,
+            childProfileId = childProfileId
         )
     }
 }

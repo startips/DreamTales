@@ -214,6 +214,14 @@ class AppConfig(context: Context) {
             .apply()
     }
 
+    fun hasMigratedChildProfiles(): Boolean {
+        return prefs.getBoolean(KEY_CHILD_PROFILES_MIGRATED, false)
+    }
+
+    fun markChildProfilesMigrated() {
+        prefs.edit().putBoolean(KEY_CHILD_PROFILES_MIGRATED, true).apply()
+    }
+
     // ---------------- 多轨白噪音混音 ----------------
 
     fun getAmbientMix(): Map<String, Float> {
@@ -261,6 +269,7 @@ class AppConfig(context: Context) {
         private const val KEY_CHILD_INTERESTS = "key_child_interests"
         private const val KEY_CHILD_TODAY_NOTE = "key_child_today_note"
         private const val KEY_CHILD_ENABLED = "key_child_enabled"
+        private const val KEY_CHILD_PROFILES_MIGRATED = "key_child_profiles_migrated_v8"
         private const val KEY_AMBIENT_MIX = "key_ambient_mix"
         private const val KEY_AMBIENT_PRESETS = "key_ambient_presets"
         const val DEFAULT_GITHUB_REPO = "startips/DreamTales"

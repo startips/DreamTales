@@ -22,6 +22,12 @@ interface SleepSessionDao {
     @Query("SELECT * FROM sleep_sessions ORDER BY endedAt DESC")
     suspend fun getAllSync(): List<SleepSession>
 
+    @Query("UPDATE sleep_sessions SET childProfileId = :childProfileId WHERE childProfileId = 0")
+    suspend fun reassignUnassignedSessions(childProfileId: Long)
+
+    @Query("UPDATE sleep_sessions SET childProfileId = 0 WHERE childProfileId = :childProfileId")
+    suspend fun clearChildReference(childProfileId: Long)
+
     @Query("DELETE FROM sleep_sessions")
     suspend fun clearAll()
 }

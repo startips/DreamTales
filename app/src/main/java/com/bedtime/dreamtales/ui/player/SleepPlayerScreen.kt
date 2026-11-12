@@ -1,7 +1,6 @@
 package com.bedtime.dreamtales.ui.player
 
 import android.app.Activity
-import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -46,6 +45,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -92,7 +92,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -104,13 +103,13 @@ import androidx.compose.ui.unit.sp
 import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConstants
+import com.bedtime.dreamtales.core.image.rememberCoverBitmap
 import com.bedtime.dreamtales.core.playback.PlaybackSpeedPolicy
 import com.bedtime.dreamtales.core.story.StoryPageSplitter
 import com.bedtime.dreamtales.core.theme.DeepNightScrim
 import com.bedtime.dreamtales.data.local.entity.StoryPage
 import com.bedtime.dreamtales.service.FlipSensorManager
 import com.bedtime.dreamtales.service.StoryPlaybackState
-import java.io.File
 import kotlin.math.max
 
 /**
@@ -135,6 +134,7 @@ fun SleepPlayerScreen(
     var showAmbientSheet by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+    var isChildLocked by remember { mutableStateOf(false) }
     var coverGenerationError by remember { mutableStateOf<String?>(null) }
 
     // 原生无权限相册图片选择器（免敏感权限、零打扰）
@@ -171,10 +171,11 @@ fun SleepPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // 双指轻点屏幕任意位置触发播放/暂停（盲操无惊扰）
-            .pointerInput(Unit) {
+            // 双指轻点屏幕任意位置触发播放/暂停（儿童锁启用时屏蔽）
+            .pointerInput(isChildLocked) {
+                if (isChildLocked) return@pointerInput
                 awaitEachGesture {
-                    val firstDown = awaitFirstDown(requireUnconsumed = false)
+                    awaitFirstDown(requireUnconsumed = false)
                     var twoFingersDetected = false
                     while (true) {
                         val event = awaitPointerEvent()
@@ -210,6 +211,23 @@ fun SleepPlayerScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回文库",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                showAmbientSheet = false
+                                showTimerDialog = false
+                                showSpeedMenu = false
+                                isChildLocked = true
+                            },
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LockOpen,
+                                contentDescription = "开启儿童锁",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -751,6 +769,14 @@ fun SleepPlayerScreen(
             )
         }
 
+        // 儿童锁柔暗防误触遮罩（翻转扣屏遮罩优先级更高）
+        if (isChildLocked) {
+            ChildLockOverlay(
+                playbackState = playbackState,
+                onUnlock = { isChildLocked = false }
+            )
+        }
+
         // 翻转扣屏感应触发时的全屏透明拦截防误触遮罩
         if (isFaceDown) {
             Box(
@@ -1029,19 +1055,7 @@ private fun StoryPagesComponent(
                 .weight(1f)
         ) { index ->
             val page = sortedPages.getOrNull(index) ?: return@AnimatedContent
-            val bitmap = remember(page.imagePath) {
-                val path = page.imagePath
-                if (!path.isNullOrBlank()) {
-                    val file = File(path)
-                    if (file.exists() && file.length() > 0) {
-                        try {
-                            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
-                        } catch (e: Exception) {
-                            null
-                        }
-                    } else null
-                } else null
-            }
+            val bitmap = rememberCoverBitmap(path = page.imagePath, maxDimensionPx = 768)
 
             Column(modifier = Modifier.fillMaxSize()) {
                 Card(
@@ -1271,18 +1285,7 @@ private fun StoryIllustrationCard(
 ) {
     var showCoverMenu by remember { mutableStateOf(false) }
 
-    val bitmap = remember(coverImagePath) {
-        if (!coverImagePath.isNullOrBlank()) {
-            val file = File(coverImagePath)
-            if (file.exists() && file.length() > 0) {
-                try {
-                    BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
-                } catch (e: Exception) {
-                    null
-                }
-            } else null
-        } else null
-    }
+    val bitmap = rememberCoverBitmap(path = coverImagePath, maxDimensionPx = 1024)
 
     Card(
         modifier = Modifier

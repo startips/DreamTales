@@ -13,7 +13,8 @@ data class SleepSessionSnapshot(
     val endedAt: Long = 0L,
     val listenedSeconds: Int = 0,
     val estimatedSleepSeconds: Int = 0,
-    val endedBy: String = "MANUAL"
+    val endedBy: String = "MANUAL",
+    val childProfileId: Long = 0L
 )
 
 data class SleepDayBucket(
@@ -50,9 +51,15 @@ object SleepStatsCalculator {
     fun build(
         sessions: List<SleepSessionSnapshot>,
         now: Long = System.currentTimeMillis(),
-        zone: ZoneId = ZoneId.systemDefault()
+        zone: ZoneId = ZoneId.systemDefault(),
+        childProfileId: Long? = null
     ): SleepWeeklyReport {
-        val valid = sessions
+        val scoped = if (childProfileId == null) {
+            sessions
+        } else {
+            sessions.filter { it.childProfileId == childProfileId }
+        }
+        val valid = scoped
             .filter { it.listenedSeconds >= MIN_VALID_SESSION_SECONDS }
             .sortedByDescending { it.endedAt }
 

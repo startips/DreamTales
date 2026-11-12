@@ -1,6 +1,7 @@
 package com.bedtime.dreamtales.core
 
 import com.bedtime.dreamtales.core.model.ChildProfile
+import com.bedtime.dreamtales.core.model.ChildProfilePolicy
 
 /**
  * 宝宝主角定制模式的纯逻辑层。
@@ -23,7 +24,9 @@ object StoryPersonalization {
 
     fun sanitize(profile: ChildProfile): ChildProfile {
         return ChildProfile(
+            id = profile.id,
             name = clean(profile.name, MAX_NAME_LENGTH),
+            avatarEmoji = ChildProfilePolicy.sanitizeAvatar(profile.avatarEmoji),
             ageLabel = clean(profile.ageLabel, MAX_AGE_LENGTH),
             interests = clean(profile.interests, MAX_INTERESTS_LENGTH),
             todayNote = clean(profile.todayNote, MAX_TODAY_NOTE_LENGTH),

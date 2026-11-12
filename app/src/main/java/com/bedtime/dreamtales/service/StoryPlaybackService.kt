@@ -43,6 +43,7 @@ import com.bedtime.dreamtales.core.playback.PlaybackResumePolicy
 import com.bedtime.dreamtales.core.playback.PlaybackSpeedPolicy
 import com.bedtime.dreamtales.data.local.entity.SleepSession
 import com.bedtime.dreamtales.data.local.entity.Story
+import com.bedtime.dreamtales.data.repository.ChildProfileRepository
 import com.bedtime.dreamtales.data.repository.PlaybackProgressRepository
 import com.bedtime.dreamtales.data.repository.SleepStatsRepository
 import com.bedtime.dreamtales.data.repository.StoryRepository
@@ -132,6 +133,7 @@ class StoryPlaybackService : MediaSessionService() {
     private val sleepStatsRepository by lazy { SleepStatsRepository(applicationContext) }
     private val progressRepository by lazy { PlaybackProgressRepository(applicationContext) }
     private val queueRepository by lazy { TonightQueueRepository(applicationContext) }
+    private val childProfileRepository by lazy { ChildProfileRepository(applicationContext) }
     private val appConfig by lazy { AppConfig.getInstance(applicationContext) }
 
     private var fadeMultiplier: Float = 1.0f
@@ -143,6 +145,9 @@ class StoryPlaybackService : MediaSessionService() {
     // 睡前陪伴会话统计
     private var sessionStoryId: Long = 0L
     private var sessionStoryTitle: String = ""
+    private var sessionChildProfileId: Long = 0L
+    @Volatile
+    private var activeChildProfileId: Long = 0L
     private var sessionStartedAt: Long = 0L
     private var sessionListenedMs: Long = 0L
     private var sessionLastResumeAt: Long = 0L
@@ -332,6 +337,13 @@ class StoryPlaybackService : MediaSessionService() {
         updateState { it.copy(playbackMode = initialMode, basePlaybackSpeed = basePlaybackSpeed) }
         applyExoPlayerRepeatMode(initialMode)
         applyPlaybackSpeed()
+
+        serviceScope.launch {
+            childProfileRepository.ensureMigratedFromLegacy()
+            childProfileRepository.getSelectedProfileFlow().collect { selected ->
+                activeChildProfileId = selected?.id ?: 0L
+            }
+        }
 
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1245,6 +1257,7 @@ class StoryPlaybackService : MediaSessionService() {
             sessionStartedAt = now
             sessionStoryId = state.storyId
             sessionStoryTitle = state.storyTitle
+            sessionChildProfileId = activeChildProfileId
             sessionListenedMs = 0L
             sessionTimerMinutes = state.selectedTimerMinutes
             sessionPausedAt = 0L
@@ -1291,7 +1304,8 @@ class StoryPlaybackService : MediaSessionService() {
                 listenedSeconds = listenedSeconds,
                 estimatedSleepSeconds = estimatedSleepSeconds,
                 endedBy = endedBy,
-                selectedTimerMinutes = sessionTimerMinutes
+                selectedTimerMinutes = sessionTimerMinutes,
+                childProfileId = sessionChildProfileId
             )
             CoroutineScope(Dispatchers.IO).launch {
                 runCatching { sleepStatsRepository.recordSession(session) }
@@ -1301,6 +1315,7 @@ class StoryPlaybackService : MediaSessionService() {
         sessionStartedAt = 0L
         sessionStoryId = 0L
         sessionStoryTitle = ""
+        sessionChildProfileId = 0L
         sessionListenedMs = 0L
         sessionLastResumeAt = 0L
         sessionPausedAt = 0L

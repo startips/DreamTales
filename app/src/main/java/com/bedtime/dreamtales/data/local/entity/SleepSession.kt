@@ -9,7 +9,10 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "sleep_sessions",
-    indices = [Index(value = ["startedAt"])]
+    indices = [
+        Index(value = ["startedAt"]),
+        Index(value = ["childProfileId"])
+    ]
 )
 data class SleepSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -20,5 +23,6 @@ data class SleepSession(
     val listenedSeconds: Int = 0,
     val estimatedSleepSeconds: Int = 0,
     val endedBy: String = "MANUAL",
-    val selectedTimerMinutes: Int = 0
+    val selectedTimerMinutes: Int = 0,
+    val childProfileId: Long = 0
 )

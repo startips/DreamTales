@@ -83,6 +83,7 @@ fun SettingsDialog(
     cacheSizeMb: Float,
     cacheCount: Int,
     childProfile: ChildProfile,
+    childProfileCount: Int = 0,
     sleepReport: SleepWeeklyReport,
     bedtimeReminder: BedtimeReminderSettings,
     onToggleBedtimeReminder: (Boolean) -> Unit,
@@ -128,7 +129,9 @@ fun SettingsDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (childProfile.isActive) {
-                                    "${childProfile.displayName} · ${childProfile.ageLabel.ifBlank { "年龄未填" }}"
+                                    "${childProfile.displayAvatar} ${childProfile.displayName} · ${childProfile.ageLabel.ifBlank { "年龄未填" }}"
+                                } else if (childProfileCount > 0) {
+                                    "已保存 $childProfileCount 份宝宝档案（暂未启用）"
                                 } else {
                                     "尚未启用宝宝主角"
                                 },
@@ -156,7 +159,7 @@ fun SettingsDialog(
                             )
                         ) {
                             Text(
-                                text = if (childProfile.isActive) "编辑档案" else "设置档案",
+                                text = if (childProfileCount > 0 || childProfile.isActive) "管理档案" else "设置档案",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )

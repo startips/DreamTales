@@ -6,7 +6,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -21,6 +20,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -103,7 +104,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -113,7 +113,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.bedtime.dreamtales.core.StoryPersonalization
+import com.bedtime.dreamtales.core.image.rememberCoverBitmap
 import com.bedtime.dreamtales.core.reminder.BedtimeReminderScheduler
 import com.bedtime.dreamtales.core.theme.WarmAlertRed
 import com.bedtime.dreamtales.core.theme.WarmSuccessGreen
@@ -136,6 +136,7 @@ import com.bedtime.dreamtales.ui.settings.SleepReportDialog
 import com.bedtime.dreamtales.ui.update.DownloadProgressDialog
 import com.bedtime.dreamtales.ui.update.NewVersionDialog
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -175,7 +176,7 @@ fun HomeScreen(
     val defaultVoice by viewModel.defaultVoice.collectAsState()
     val allVoices by viewModel.allVoices.collectAsState()
     val completedCaches by viewModel.completedCaches.collectAsState()
-    val playbackState by viewModel.playbackState.collectAsState()
+    val playbackSummary by viewModel.playbackSummary.collectAsState()
     val synthesisState by viewModel.synthesisState.collectAsState()
     val generationState by viewModel.generationState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
@@ -190,7 +191,9 @@ fun HomeScreen(
             themeHintVisible = false
         }
     }
+    val childProfiles by viewModel.childProfiles.collectAsState()
     val childProfile by viewModel.childProfile.collectAsState()
+    val selectedReportChildId by viewModel.selectedReportChildId.collectAsState()
     val sleepReport by viewModel.sleepReport.collectAsState()
     val tonightQueue by viewModel.tonightQueue.collectAsState()
     val continueListening by viewModel.continueListening.collectAsState()
@@ -613,12 +616,12 @@ fun HomeScreen(
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = playbackState.storyTitle.isNotBlank(),
+                visible = playbackSummary.hasActiveSession,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
                 BottomMiniPlayer(
-                    playbackState = playbackState,
+                    playbackStateFlow = viewModel.playbackState,
                     onCardClick = onNavigateToPlayer,
                     onTogglePlayPause = onTogglePlayPause
                 )
@@ -706,29 +709,82 @@ fun HomeScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // 宝宝专属主角状态徽章
-                        StoryPersonalization.activeBadge(childProfile)?.let { badge ->
+                        // 多宝宝今晚主角快捷切换栏
+                        if (childProfiles.isNotEmpty()) {
+                            val noneSelected = childProfiles.none { it.isEnabled }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.small)
-                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = badge,
+                                    text = "✨ 今晚主角",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(
-                                    text = "AI 专属定制",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 9.sp
-                                )
+                                childProfiles.forEach { profile ->
+                                    val selected = profile.isEnabled
+                                    Surface(
+                                        onClick = {
+                                            viewModel.selectChildProfile(
+                                                if (selected) null else profile.id
+                                            )
+                                        },
+                                        shape = CircleShape,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainer
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "${profile.displayAvatar} ${profile.displayName}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    onClick = { viewModel.selectChildProfile(null) },
+                                    shape = CircleShape,
+                                    color = if (noneSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainer
+                                    }
+                                ) {
+                                    Text(
+                                        text = "暂不启用",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (noneSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                    )
+                                }
+                                Surface(
+                                    onClick = { showChildProfileDialog = true },
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                                ) {
+                                    Text(
+                                        text = "管理",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                         }
@@ -1167,7 +1223,7 @@ fun HomeScreen(
             // 3. 故事卡片列表
             items(displayStories, key = { it.id }) { story ->
                 val isCached = completedCaches.any { it.storyId == story.id && it.voiceProfileId == defaultVoice?.id }
-                val isCurrentPlaying = (playbackState.storyId == story.id && playbackState.isPlaying)
+                val isCurrentPlaying = (playbackSummary.storyId == story.id && playbackSummary.isPlaying)
                 val isSynthesizing = (synthesisState is SynthesisUiState.Synthesizing && (synthesisState as SynthesisUiState.Synthesizing).storyId == story.id)
                 val synthesisProgress = if (isSynthesizing) (synthesisState as SynthesisUiState.Synthesizing).progress else 0
 
@@ -1279,6 +1335,7 @@ fun HomeScreen(
             cacheSizeMb = cacheSizeMb,
             cacheCount = cacheCount,
             childProfile = childProfile,
+            childProfileCount = childProfiles.size,
             sleepReport = sleepReport,
             bedtimeReminder = bedtimeReminder,
             onToggleBedtimeReminder = { enabled ->
@@ -1883,18 +1940,29 @@ fun HomeScreen(
         )
     }
 
-    // 宝宝专属主角档案
+    // 宝宝专属主角档案（支持多孩家庭）
     if (showChildProfileDialog) {
         ChildProfileDialog(
-            profile = childProfile,
-            onSave = { profile ->
-                viewModel.saveChildProfile(profile)
-                showChildProfileDialog = false
-                Toast.makeText(
-                    context,
-                    if (profile.isActive) "已开启宝宝主角：${profile.displayName}" else "宝宝主角已关闭",
-                    Toast.LENGTH_SHORT
-                ).show()
+            profiles = childProfiles,
+            onSelectProfile = { profileId ->
+                viewModel.selectChildProfile(profileId)
+            },
+            onSaveProfile = { profile, makeSelected ->
+                viewModel.saveChildProfile(profile, makeSelected) { savedId ->
+                    if (savedId == -1L) {
+                        Toast.makeText(context, "最多支持 5 个宝宝档案", Toast.LENGTH_SHORT).show()
+                    } else if (savedId > 0L) {
+                        Toast.makeText(
+                            context,
+                            if (makeSelected) "已保存并设为今晚主角：${profile.displayName}" else "已保存宝宝档案：${profile.displayName}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            },
+            onDeleteProfile = { profileId ->
+                viewModel.deleteChildProfile(profileId)
+                Toast.makeText(context, "已删除宝宝档案", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showChildProfileDialog = false }
         )
@@ -1904,6 +1972,9 @@ fun HomeScreen(
     if (showSleepReportDialog) {
         SleepReportDialog(
             report = sleepReport,
+            profiles = childProfiles,
+            selectedChildId = selectedReportChildId,
+            onSelectChild = { viewModel.selectReportChild(it) },
             onDismiss = { showSleepReportDialog = false }
         )
     }
@@ -2030,18 +2101,7 @@ private fun VerticalStoryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. 左侧童话睡前插画/徽章
-                val coverBitmap = remember(story.coverImagePath) {
-                    if (!story.coverImagePath.isNullOrBlank()) {
-                        val f = File(story.coverImagePath)
-                        if (f.exists() && f.length() > 0) {
-                            try {
-                                BitmapFactory.decodeFile(f.absolutePath)?.asImageBitmap()
-                            } catch (e: Exception) {
-                                null
-                            }
-                        } else null
-                    } else null
-                }
+                val coverBitmap = rememberCoverBitmap(path = story.coverImagePath, maxDimensionPx = 192)
 
                 Box(
                     modifier = Modifier
@@ -2259,26 +2319,19 @@ private fun VerticalStoryCard(
  */
 @Composable
 private fun BottomMiniPlayer(
-    playbackState: StoryPlaybackState,
+    playbackStateFlow: StateFlow<StoryPlaybackState>,
     onCardClick: () -> Unit,
     onTogglePlayPause: () -> Unit
 ) {
+    val playbackState by playbackStateFlow.collectAsState()
     val progress = if (playbackState.totalDurationMs > 0) {
         (playbackState.currentPositionMs.toFloat() / playbackState.totalDurationMs).coerceIn(0f, 1f)
     } else 0f
 
-    val coverBitmap = remember(playbackState.coverImagePath) {
-        playbackState.coverImagePath
-            ?.takeIf { it.isNotBlank() }
-            ?.let { path ->
-                val file = File(path)
-                if (file.exists() && file.length() > 0) {
-                    runCatching {
-                        BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
-                    }.getOrNull()
-                } else null
-            }
-    }
+    val coverBitmap = rememberCoverBitmap(
+        path = playbackState.coverImagePath,
+        maxDimensionPx = 160
+    )
 
     Card(
         onClick = onCardClick,

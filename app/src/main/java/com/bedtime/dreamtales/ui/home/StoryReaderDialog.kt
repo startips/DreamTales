@@ -1,6 +1,5 @@
 package com.bedtime.dreamtales.ui.home
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,18 +30,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bedtime.dreamtales.core.image.rememberCoverBitmap
 import com.bedtime.dreamtales.data.local.entity.Story
-import java.io.File
 
 /**
  * 故事正文阅读弹窗 (亲子共读/阅读全文)
@@ -54,18 +51,7 @@ fun StoryReaderDialog(
     onPlayClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val coverBitmap = remember(story.coverImagePath) {
-        if (!story.coverImagePath.isNullOrBlank()) {
-            val f = File(story.coverImagePath)
-            if (f.exists() && f.length() > 0) {
-                try {
-                    BitmapFactory.decodeFile(f.absolutePath)?.asImageBitmap()
-                } catch (e: Exception) {
-                    null
-                }
-            } else null
-        } else null
-    }
+    val coverBitmap = rememberCoverBitmap(path = story.coverImagePath, maxDimensionPx = 160)
 
     AlertDialog(
         onDismissRequest = onDismiss,

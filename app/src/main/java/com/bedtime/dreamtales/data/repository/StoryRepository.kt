@@ -41,6 +41,7 @@ class StoryRepository(private val context: Context) {
     private val pageDao = db.storyPageDao()
     private val appConfig = AppConfig.getInstance(context)
     private val progressRepository = PlaybackProgressRepository(context)
+    private val childProfileRepository = ChildProfileRepository(context)
     private val synthesisMutex = Mutex()
 
     fun getAllStories(): Flow<List<Story>> = storyDao.getAllStories()
@@ -294,7 +295,9 @@ class StoryRepository(private val context: Context) {
 
         // 输入过滤与长度截断，防范提示词逃逸与越狱
         val cleanQuery = query.take(60).replace("\n", " ").replace("\r", " ").trim()
-        val childContext = StoryPersonalization.candidatePromptContext(appConfig.getChildProfile())
+        val childContext = StoryPersonalization.candidatePromptContext(
+            childProfileRepository.getActiveChildProfileSync()
+        )
 
         val prompt = """
             【角色定位与安全准则】：
@@ -371,7 +374,9 @@ class StoryRepository(private val context: Context) {
         val safeTitle = candidate.title.take(30).replace("\n", " ").trim()
         val safeAge = candidate.targetAge.take(15).replace("\n", " ").trim()
         val safeSummary = candidate.summary.take(100).replace("\n", " ").trim()
-        val childContext = StoryPersonalization.storyPromptContext(appConfig.getChildProfile())
+        val childContext = StoryPersonalization.storyPromptContext(
+            childProfileRepository.getActiveChildProfileSync()
+        )
 
         val prompt = """
             【角色定位与安全准则】：

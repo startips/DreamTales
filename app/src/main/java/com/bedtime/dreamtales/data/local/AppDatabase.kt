@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bedtime.dreamtales.data.local.dao.ChildProfileDao
 import com.bedtime.dreamtales.data.local.dao.PlaybackPositionDao
 import com.bedtime.dreamtales.data.local.dao.QueueDao
 import com.bedtime.dreamtales.data.local.dao.SleepSessionDao
@@ -13,6 +14,7 @@ import com.bedtime.dreamtales.data.local.dao.StoryAudioCacheDao
 import com.bedtime.dreamtales.data.local.dao.StoryDao
 import com.bedtime.dreamtales.data.local.dao.StoryPageDao
 import com.bedtime.dreamtales.data.local.dao.VoiceProfileDao
+import com.bedtime.dreamtales.data.local.entity.ChildProfileEntity
 import com.bedtime.dreamtales.data.local.entity.PlaybackPosition
 import com.bedtime.dreamtales.data.local.entity.QueueItem
 import com.bedtime.dreamtales.data.local.entity.SleepSession
@@ -32,9 +34,10 @@ import kotlinx.coroutines.launch
         StoryPage::class,
         SleepSession::class,
         PlaybackPosition::class,
-        QueueItem::class
+        QueueItem::class,
+        ChildProfileEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,6 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sleepSessionDao(): SleepSessionDao
     abstract fun playbackPositionDao(): PlaybackPositionDao
     abstract fun queueDao(): QueueDao
+    abstract fun childProfileDao(): ChildProfileDao
 
     companion object {
         @Volatile
@@ -136,6 +140,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `child_profiles` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`avatarEmoji` TEXT NOT NULL, " +
+                        "`ageLabel` TEXT NOT NULL, " +
+                        "`interests` TEXT NOT NULL, " +
+                        "`todayNote` TEXT NOT NULL, " +
+                        "`isSelected` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "ALTER TABLE sleep_sessions ADD COLUMN childProfileId INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sleep_sessions_childProfileId` " +
+                        "ON `sleep_sessions` (`childProfileId`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -154,7 +181,8 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_3_4,
                     MIGRATION_4_5,
                     MIGRATION_5_6,
-                    MIGRATION_6_7
+                    MIGRATION_6_7,
+                    MIGRATION_7_8
                 )
                 .fallbackToDestructiveMigration()
                 .addCallback(object : Callback() {

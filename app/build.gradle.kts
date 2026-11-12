@@ -42,8 +42,8 @@ android {
         applicationId = "com.bedtime.dreamtales"
         minSdk = 34
         targetSdk = 34
-        versionCode = 15
-        versionName = "2.2.2"
+        versionCode = 16
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

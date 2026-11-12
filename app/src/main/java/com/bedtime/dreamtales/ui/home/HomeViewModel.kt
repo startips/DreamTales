@@ -12,6 +12,7 @@ import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import com.bedtime.dreamtales.data.api.StoryCandidate
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
+import com.bedtime.dreamtales.data.repository.ChildProfileRepository
 import com.bedtime.dreamtales.data.repository.ImportResult
 import com.bedtime.dreamtales.data.repository.PlaybackProgressRepository
 import com.bedtime.dreamtales.data.repository.SleepStatsRepository
@@ -24,12 +25,16 @@ import com.bedtime.dreamtales.service.StoryPlaybackState
 import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
 import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -71,6 +76,16 @@ data class ContinueListeningItem(
         } else 0f
 }
 
+/**
+ * 供首页列表与「继续听」使用的轻量播放摘要，剥离 10Hz 的进度条毫秒更新，避免整页高频重组。
+ */
+data class HomePlaybackSummary(
+    val storyId: Long = 0L,
+    val hasActiveSession: Boolean = false,
+    val isPlaying: Boolean = false,
+    val isAmbientOnly: Boolean = false
+)
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val storyRepository = StoryRepository(application)
@@ -78,6 +93,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val sleepStatsRepository = SleepStatsRepository(application)
     private val queueRepository = TonightQueueRepository(application)
     private val progressRepository = PlaybackProgressRepository(application)
+    private val childProfileRepository = ChildProfileRepository(application)
     private val appConfig = AppConfig.getInstance(application)
 
     val stories: StateFlow<List<Story>> = storyRepository.getAllStories()
@@ -94,13 +110,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val playbackState: StateFlow<StoryPlaybackState> = StoryPlaybackService.playbackState
 
+    val playbackSummary: StateFlow<HomePlaybackSummary> = StoryPlaybackService.playbackState
+        .map { state ->
+            HomePlaybackSummary(
+                storyId = state.storyId,
+                hasActiveSession = state.storyTitle.isNotBlank(),
+                isPlaying = state.isPlaying,
+                isAmbientOnly = state.isAmbientOnly
+            )
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomePlaybackSummary())
+
     private val _themeMode = MutableStateFlow(appConfig.getThemeMode())
     val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
-    private val _childProfile = MutableStateFlow(appConfig.getChildProfile())
-    val childProfile: StateFlow<ChildProfile> = _childProfile.asStateFlow()
+    val childProfiles: StateFlow<List<ChildProfile>> = childProfileRepository.getAllProfilesFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val sleepReport: StateFlow<SleepWeeklyReport> = sleepStatsRepository.getWeeklyReportFlow()
+    val childProfile: StateFlow<ChildProfile> = childProfileRepository.getSelectedProfileFlow()
+        .map { it ?: ChildProfile() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), appConfig.getChildProfile())
+
+    private val _selectedReportChildId = MutableStateFlow<Long?>(null)
+    val selectedReportChildId: StateFlow<Long?> = _selectedReportChildId.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val sleepReport: StateFlow<SleepWeeklyReport> = _selectedReportChildId
+        .flatMapLatest { childId -> sleepStatsRepository.getWeeklyReportFlow(childId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepWeeklyReport())
 
     /**
@@ -120,7 +157,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val continueListening: StateFlow<ContinueListeningItem?> = combine(
         storyRepository.getAllStories(),
         progressRepository.getMostRecentFlow(),
-        StoryPlaybackService.playbackState
+        playbackSummary
     ) { stories, position, playback ->
         if (position == null) return@combine null
         val story = stories.firstOrNull { it.id == position.storyId } ?: return@combine null
@@ -170,6 +207,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            childProfileRepository.ensureMigratedFromLegacy()
             storyRepository.ensureClassicStoriesPopulated()
             storyRepository.cleanLegacyAudioCaches()
             voiceRepository.insertPresetVoiceIfEmpty()
@@ -199,9 +237,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _themeMode.value = mode
     }
 
-    fun saveChildProfile(profile: ChildProfile) {
-        appConfig.setChildProfile(profile)
-        _childProfile.value = profile
+    fun saveChildProfile(
+        profile: ChildProfile,
+        makeSelected: Boolean = profile.isEnabled,
+        onResult: ((Long) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            val savedId = childProfileRepository.saveProfile(profile, makeSelected)
+            onResult?.invoke(savedId)
+        }
+    }
+
+    fun selectChildProfile(profileId: Long?) {
+        viewModelScope.launch {
+            childProfileRepository.selectProfile(profileId)
+        }
+    }
+
+    fun deleteChildProfile(profileId: Long) {
+        viewModelScope.launch {
+            childProfileRepository.deleteProfile(profileId)
+            if (_selectedReportChildId.value == profileId) {
+                _selectedReportChildId.value = null
+            }
+        }
+    }
+
+    fun selectReportChild(childProfileId: Long?) {
+        _selectedReportChildId.value = childProfileId
     }
 
     // ---------------- 今晚故事单 ----------------

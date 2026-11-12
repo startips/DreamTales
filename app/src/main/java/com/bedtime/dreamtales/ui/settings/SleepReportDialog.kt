@@ -1,6 +1,7 @@
 package com.bedtime.dreamtales.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bedtime.dreamtales.core.model.ChildProfile
 import com.bedtime.dreamtales.core.stats.SleepSessionSnapshot
 import com.bedtime.dreamtales.core.stats.SleepWeeklyReport
 import java.time.Instant
@@ -36,6 +40,9 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun SleepReportDialog(
     report: SleepWeeklyReport,
+    profiles: List<ChildProfile> = emptyList(),
+    selectedChildId: Long? = null,
+    onSelectChild: (Long?) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -61,6 +68,50 @@ fun SleepReportDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                if (profiles.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = (selectedChildId == null),
+                            onClick = { onSelectChild(null) },
+                            label = { Text("全部", style = MaterialTheme.typography.labelSmall) },
+                            shape = CircleShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            border = null
+                        )
+                        profiles.forEach { profile ->
+                            val isSelected = (selectedChildId == profile.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSelectChild(profile.id) },
+                                label = {
+                                    Text(
+                                        "${profile.displayAvatar} ${profile.displayName}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                shape = CircleShape,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                border = null
+                            )
+                        }
+                    }
+                }
+
                 if (!report.hasData) {
                     Column(
                         modifier = Modifier
@@ -71,14 +122,18 @@ fun SleepReportDialog(
                         Text(text = "🌙", fontSize = 36.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "还没有陪伴记录",
+                            text = if (selectedChildId != null) "这位宝宝还没有陪伴记录" else "还没有陪伴记录",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "今晚播放一篇睡前故事，明早就能看到第一份温柔记录。",
+                            text = if (selectedChildId != null) {
+                                "在主页选中这位宝宝作为今晚主角后播放故事，就会记录 Ta 的专属周报。"
+                            } else {
+                                "今晚播放一篇睡前故事，明早就能看到第一份温柔记录。"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
