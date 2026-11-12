@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.3.0",
-  "name": "v2.3.0",
-  "versionName": "2.3.0",
-  "versionCode": 16,
-  "body": "月眠 2.3.0 · 安心陪伴升级\n\n- **播放页儿童锁**：顶部栏一键锁定，屏蔽返回键与边缘侧滑，隐藏系统栏与误触按钮，轻触屏幕浮现「长按 2.5 秒解锁」环形胶囊，与翻转扣屏安全叠加\n- **多宝宝档案**：最多支持 5 个宝宝档案与专属头像，首页搜索卡可直接切换「今晚主角」或暂不启用；旧版单宝宝档案及历史陪伴记录自动无损迁移\n- **分宝宝陪伴周报**：周报顶部支持按「全部」或单个宝宝独立查看聆听时长、陪伴晚数与 7 日柱状图\n- **性能优化**：剥离首页 10Hz 播放进度高频重组至迷你播放器；封面与连环画插图改为 IO 异步采样解码与 LRU 缓存",
-  "published_at": "2026-11-12T11:55:28Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.0/DreamTales-v2.3.0.apk",
-  "apkName": "DreamTales-v2.3.0.apk",
-  "apkSizeBytes": 18202584,
+  "tag_name": "v2.3.1",
+  "name": "v2.3.1",
+  "versionName": "2.3.1",
+  "versionCode": 17,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.0...v2.3.1",
+  "published_at": "2026-11-12T12:15:58Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.1/DreamTales-v2.3.1.apk",
+  "apkName": "DreamTales-v2.3.1.apk",
+  "apkSizeBytes": 18235356,
   "assets": [
     {
-      "name": "DreamTales-v2.3.0.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.0/DreamTales-v2.3.0.apk",
-      "size": 18202584
+      "name": "DreamTales-v2.3.1.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.1/DreamTales-v2.3.1.apk",
+      "size": 18235356
     }
   ]
 }
