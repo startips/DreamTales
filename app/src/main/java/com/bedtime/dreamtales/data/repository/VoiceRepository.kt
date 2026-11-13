@@ -7,6 +7,8 @@ import com.bedtime.dreamtales.data.local.AppDatabase
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -89,27 +91,29 @@ class VoiceRepository(private val context: Context) {
     }
 
     suspend fun insertPresetVoiceIfEmpty() {
-        val all = voiceDao.getAllVoiceProfilesSync()
+        presetMutex.withLock {
+            val all = voiceDao.getAllVoiceProfilesSync()
 
-        // 清理旧的 Google 和百炼音色，保持文库纯净无冗余调用
-        all.filter { it.cloudVoiceId.startsWith("google:") || it.cloudVoiceId.startsWith("cosyvoice") }
-            .forEach { voiceDao.deleteVoiceProfile(it) }
+            // 清理旧的 Google 和百炼音色，保持文库纯净无冗余调用
+            all.filter { it.cloudVoiceId.startsWith("google:") || it.cloudVoiceId.startsWith("cosyvoice") }
+                .forEach { voiceDao.deleteVoiceProfile(it) }
 
-        val remaining = voiceDao.getAllVoiceProfilesSync()
-        val hasMimo = remaining.any { it.cloudVoiceId == "mimo:default" }
-        if (!hasMimo) {
-            val mimoVoice = VoiceProfile(
-                name = "温柔月光 · 小米原生 (MiMo TTS)",
-                cloudVoiceId = "mimo:default",
-                localSamplePath = "",
-                isDefault = true,
-                createdAt = System.currentTimeMillis() - 4000
-            )
-            val id = voiceDao.insertVoiceProfile(mimoVoice)
-            voiceDao.setDefaultVoiceProfile(id)
-        } else if (remaining.none { it.isDefault }) {
-            val defaultOne = remaining.firstOrNull { it.cloudVoiceId == "mimo:default" } ?: remaining.first()
-            voiceDao.setDefaultVoiceProfile(defaultOne.id)
+            val remaining = voiceDao.getAllVoiceProfilesSync()
+            val hasMimo = remaining.any { it.cloudVoiceId == "mimo:default" }
+            if (!hasMimo) {
+                val mimoVoice = VoiceProfile(
+                    name = "温柔月光 · 小米原生 (MiMo TTS)",
+                    cloudVoiceId = "mimo:default",
+                    localSamplePath = "",
+                    isDefault = true,
+                    createdAt = System.currentTimeMillis() - 4000
+                )
+                val id = voiceDao.insertVoiceProfile(mimoVoice)
+                voiceDao.setDefaultVoiceProfile(id)
+            } else if (remaining.none { it.isDefault }) {
+                val defaultOne = remaining.firstOrNull { it.cloudVoiceId == "mimo:default" } ?: remaining.first()
+                voiceDao.setDefaultVoiceProfile(defaultOne.id)
+            }
         }
     }
 
@@ -139,7 +143,8 @@ class VoiceRepository(private val context: Context) {
             val audioDir = File(context.filesDir, "audio_caches")
             if (audioDir.exists()) {
                 audioDir.listFiles()?.forEach { file ->
-                    if (file.name.contains("_voice_${profile.id}")) {
+                    // 精确匹配 _voice_{id}_，避免删除 id=1 时误删 _voice_10/_voice_12 等
+                    if (file.name.contains("_voice_${profile.id}_") || file.name.contains("_voice_${profile.id}.wav")) {
                         file.delete()
                     }
                 }
@@ -167,5 +172,10 @@ class VoiceRepository(private val context: Context) {
         }
 
         true
+    }
+
+    companion object {
+        /** 预置音色播种互斥：App 启动与首页初始化会并发调用，避免插入两份默认音色。 */
+        private val presetMutex = Mutex()
     }
 }

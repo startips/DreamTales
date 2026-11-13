@@ -36,4 +36,7 @@ interface StoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(stories: List<Story>)
+
+    @Query("DELETE FROM stories WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }

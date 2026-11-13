@@ -68,14 +68,24 @@ class MainActivity : ComponentActivity() {
                 playerViewModel.attachService(binder.getService())
                 isBound = true
                 pendingStoryToPlay?.let { (story, path, autoPlay) ->
-                    playbackService?.playStoryAudio(
-                        storyId = story.id,
-                        storyTitle = story.title,
-                        storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
-                        localFilePath = path,
-                        autoPlay = autoPlay
-                    )
+                    // 音频文件可能已被清理（例如用户清空离线缓存），必须兜底捕获避免崩溃
+                    val ok = runCatching {
+                        binder.getService().playStoryAudio(
+                            storyId = story.id,
+                            storyTitle = story.title,
+                            storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
+                            localFilePath = path,
+                            autoPlay = autoPlay
+                        )
+                    }.isSuccess
                     pendingStoryToPlay = null
+                    if (!ok) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "音频文件已失效，请重新点播《${story.title}》",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
@@ -150,18 +160,30 @@ class MainActivity : ComponentActivity() {
                             onPlayStory = { story, localFilePath, autoPlay ->
                                 // 普通点播进入待命模式；桌面小组件一键伴读则自动开播
                                 val currentService = playbackService
+                                var playAccepted = true
                                 if (currentService != null) {
-                                    currentService.playStoryAudio(
-                                        storyId = story.id,
-                                        storyTitle = story.title,
-                                        storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
-                                        localFilePath = localFilePath,
-                                        autoPlay = autoPlay
-                                    )
+                                    playAccepted = runCatching {
+                                        currentService.playStoryAudio(
+                                            storyId = story.id,
+                                            storyTitle = story.title,
+                                            storyContent = com.bedtime.dreamtales.core.StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
+                                            localFilePath = localFilePath,
+                                            autoPlay = autoPlay
+                                        )
+                                    }.isSuccess
+                                    if (!playAccepted) {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "音频文件已失效，请重新点播《${story.title}》",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
                                 } else {
                                     pendingStoryToPlay = Triple(story, localFilePath, autoPlay)
                                 }
-                                navController.navigate(Screen.SleepPlayer.route)
+                                if (playAccepted) {
+                                    navController.navigate(Screen.SleepPlayer.route)
+                                }
                             },
                             pendingWidgetStoryId = widgetPendingStoryId,
                             onWidgetStoryConsumed = { widgetPendingStoryId = null },

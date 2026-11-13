@@ -231,10 +231,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            // 音色优先就绪，避免全新安装时首屏点播短暂出现「未设置音色」
+            voiceRepository.insertPresetVoiceIfEmpty()
             childProfileRepository.ensureMigratedFromLegacy()
             storyRepository.ensureClassicStoriesPopulated()
             storyRepository.cleanLegacyAudioCaches()
-            voiceRepository.insertPresetVoiceIfEmpty()
             val voice = voiceRepository.getDefaultVoiceProfileSync()
             if (voice != null) {
                 storyRepository.preCacheUpcomingStories(voice)
@@ -309,10 +310,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { queueRepository.clear() }
     }
 
-    fun playTonightQueue(onNavigateToPlayer: () -> Unit) {
+    fun playTonightQueue(onNavigateToPlayer: () -> Unit, onEmpty: () -> Unit = {}) {
         viewModelScope.launch {
-            val firstId = queueRepository.getStoryIdsSync().firstOrNull() ?: return@launch
-            val story = storyRepository.getStoryById(firstId) ?: return@launch
+            val firstId = queueRepository.getStoryIdsSync().firstOrNull()
+            if (firstId == null) {
+                onEmpty()
+                return@launch
+            }
+            val story = storyRepository.getStoryById(firstId)
+            if (story == null) {
+                onEmpty()
+                return@launch
+            }
             onStoryClicked(
                 story = story,
                 onNavigateToPlayer = onNavigateToPlayer,
@@ -553,6 +562,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         autoPlay: Boolean = false,
         preserveQueue: Boolean = false
     ) {
+        // 用户在前台点播：立即让后台预缓存让位，优先响应用户
+        storyRepository.prioritizeForegroundRequest()
         val currentPlayback = StoryPlaybackService.playbackState.value
         // 如果当前已在播放/就绪该故事，直接无缝进入沉浸播放器；
         // 但「今晚故事单」或小组件要求自动开播且当前处于暂停时，需要继续走播放链路。

@@ -41,6 +41,7 @@ import com.bedtime.dreamtales.core.constants.AppConstants
 import com.bedtime.dreamtales.core.playback.PlaybackQueuePolicy
 import com.bedtime.dreamtales.core.playback.PlaybackResumePolicy
 import com.bedtime.dreamtales.core.playback.PlaybackSpeedPolicy
+import com.bedtime.dreamtales.core.playback.SleepTimerPolicy
 import com.bedtime.dreamtales.data.local.entity.SleepSession
 import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.repository.ChildProfileRepository
@@ -61,6 +62,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import java.io.File
 import kotlin.math.ln
 import kotlin.math.max
@@ -126,6 +128,11 @@ class StoryPlaybackService : MediaSessionService() {
     private var sleepTimerJob: Job? = null
     private var progressTrackingJob: Job? = null
     private var manualSkipJob: Job? = null
+
+    // 睡眠定时状态机：区分「系统默认挂载」「用户主动取消」「定时刚归零」
+    private var timerCancelledByUser = false
+    private var timerExpiredRecently = false
+    private var lastRequestedTimerMinutes = 30
 
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val storyRepository by lazy { StoryRepository(applicationContext) }
@@ -493,7 +500,8 @@ class StoryPlaybackService : MediaSessionService() {
         storyTitle: String,
         storyContent: String,
         localFilePath: String,
-        autoPlay: Boolean = false
+        autoPlay: Boolean = false,
+        viaAutoAdvance: Boolean = false
     ) {
         val file = File(localFilePath)
         if (!file.exists() || file.length() == 0L) {
@@ -507,10 +515,8 @@ class StoryPlaybackService : MediaSessionService() {
             refreshCurrentFavoriteState(storyId)
             if (autoPlay && !exoPlayer.isPlaying) {
                 resetFadeIfTimerFinished()
+                armDefaultTimerIfNeeded(viaAutoAdvance)
                 exoPlayer.play()
-            }
-            if (!currentState.isTimerActive || currentState.remainingTimerSeconds <= 0) {
-                startSleepTimer(30)
             }
             updateNotification(storyTitle, isPlaying = exoPlayer.isPlaying)
             return
@@ -590,12 +596,29 @@ class StoryPlaybackService : MediaSessionService() {
             }
         }
 
-        // 默认自动准备 30 分钟伴读倒计时（处于挂起等待开播态）
-        if (!currentState.isTimerActive || currentState.remainingTimerSeconds <= 0) {
-            startSleepTimer(30)
-        }
+        // 默认定时只在「用户手动开始播放」时挂载；
+        // 自动连播不重新挂（避免定时归零后又被偷偷续上 30 分钟），
+        // 用户手动取消后也不会被重新挂回来。
+        armDefaultTimerIfNeeded(viaAutoAdvance)
 
         updateNotification(storyTitle, isPlaying = autoPlay)
+    }
+
+    /**
+     * 仅当没有活动定时、用户没有主动取消、且不是自动连播时才挂默认 30 分钟定时。
+     */
+    private fun armDefaultTimerIfNeeded(viaAutoAdvance: Boolean) {
+        val state = playbackState.value
+        val shouldArm = SleepTimerPolicy.shouldArmDefaultTimer(
+            isTimerActive = state.isTimerActive,
+            remainingSeconds = state.remainingTimerSeconds,
+            cancelledByUser = timerCancelledByUser,
+            expiredRecently = timerExpiredRecently,
+            viaAutoAdvance = viaAutoAdvance
+        )
+        if (shouldArm) {
+            startSleepTimer(lastRequestedTimerMinutes.coerceAtLeast(1))
+        }
     }
 
     /**
@@ -645,9 +668,7 @@ class StoryPlaybackService : MediaSessionService() {
         exoPlayer.prepare()
         exoPlayer.play()
 
-        if (!current.isTimerActive || current.remainingTimerSeconds <= 0) {
-            startSleepTimer(30)
-        }
+        armDefaultTimerIfNeeded(viaAutoAdvance = false)
         updateNotification("月眠声景", isPlaying = true)
     }
 
@@ -679,6 +700,23 @@ class StoryPlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * 服务销毁前保存进度：不能再用 serviceScope（随后会被 cancel），
+     * 否则最后一次断点进度会丢失。
+     */
+    private fun savePlaybackPositionOnExit() {
+        val state = playbackState.value
+        if (state.storyId == 0L || state.isAmbientOnly) return
+        if (exoPlayer.playbackState == Player.STATE_IDLE) return
+        val position = exoPlayer.currentPosition.coerceAtLeast(0L)
+        val duration = exoPlayer.duration.takeIf { it > 0L } ?: state.totalDurationMs
+        if (position <= 0L && duration <= 0L) return
+        val storyId = state.storyId
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { progressRepository.save(storyId, position, duration) }
+        }
+    }
+
     fun updateCoverImagePath(path: String?) {
         updateState { it.copy(coverImagePath = path) }
     }
@@ -694,6 +732,15 @@ class StoryPlaybackService : MediaSessionService() {
             // 纯声景没有选择任何音轨时，不启动无意义的静音循环
             if (playbackState.value.isAmbientOnly && playbackState.value.ambientMix.isEmpty()) return
             resetFadeIfTimerFinished()
+            // 定时已归零后手动续播：重新挂上上次选择的定时，避免整夜无人叫停
+            if (SleepTimerPolicy.shouldRearmAfterExpiry(
+                    isTimerActive = playbackState.value.isTimerActive,
+                    cancelledByUser = timerCancelledByUser,
+                    expiredRecently = timerExpiredRecently
+                )
+            ) {
+                startSleepTimer(lastRequestedTimerMinutes.coerceAtLeast(1))
+            }
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0L)
             }
@@ -707,6 +754,14 @@ class StoryPlaybackService : MediaSessionService() {
 
     fun resume() {
         resetFadeIfTimerFinished()
+        if (SleepTimerPolicy.shouldRearmAfterExpiry(
+                isTimerActive = playbackState.value.isTimerActive,
+                cancelledByUser = timerCancelledByUser,
+                expiredRecently = timerExpiredRecently
+            )
+        ) {
+            startSleepTimer(lastRequestedTimerMinutes.coerceAtLeast(1))
+        }
         if (exoPlayer.playbackState == Player.STATE_ENDED) {
             exoPlayer.seekTo(0L)
         }
@@ -785,9 +840,10 @@ class StoryPlaybackService : MediaSessionService() {
 
     /**
      * 设置任意多轨混音。传入空 Map 表示关闭背景音。
+     * persist = false 用于滑杆拖动中的实时试听，松手后再落盘，避免每帧写加密配置。
      */
-    fun setAmbientMix(mix: Map<String, Float>) {
-        applyAmbientMix(mix, persist = true)
+    fun setAmbientMix(mix: Map<String, Float>, persist: Boolean = true) {
+        applyAmbientMix(mix, persist = persist)
     }
 
     /**
@@ -936,6 +992,14 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     private suspend fun playStoryFromLibrary(story: Story, autoPlay: Boolean): Boolean {
+        // 睡眠定时刚归零时的自动连播：尊重「该睡了」，直接结束而不是再播下一篇
+        if (SleepTimerPolicy.shouldBlockAutoAdvance(
+                expiredRecently = timerExpiredRecently,
+                isTimerActive = playbackState.value.isTimerActive
+            )
+        ) {
+            return false
+        }
         val defaultVoice = voiceRepository.getDefaultVoiceProfileSync() ?: return false
         return try {
             val filePath = storyRepository.getOrSynthesizeStoryAudio(story, defaultVoice)
@@ -945,7 +1009,8 @@ class StoryPlaybackService : MediaSessionService() {
                 storyTitle = story.title,
                 storyContent = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content),
                 localFilePath = filePath,
-                autoPlay = autoPlay
+                autoPlay = autoPlay,
+                viaAutoAdvance = true
             )
             true
         } catch (e: Exception) {
@@ -1133,8 +1198,12 @@ class StoryPlaybackService : MediaSessionService() {
      */
     fun startSleepTimer(durationMinutes: Int) {
         sleepTimerJob?.cancel()
-        val totalSeconds = durationMinutes * 60
-        sessionTimerMinutes = durationMinutes
+        val safeMinutes = durationMinutes.coerceAtLeast(1)
+        val totalSeconds = safeMinutes * 60
+        sessionTimerMinutes = safeMinutes
+        lastRequestedTimerMinutes = safeMinutes
+        timerCancelledByUser = false
+        timerExpiredRecently = false
 
         fadeMultiplier = 1.0f
         fadeSpeedMultiplier = 1.0f
@@ -1206,6 +1275,7 @@ class StoryPlaybackService : MediaSessionService() {
             // 倒计时归零：执行停播与资源释放
             if (remaining <= 0) {
                 fadeMultiplier = 0.0f
+                timerExpiredRecently = true
                 exoPlayer.pause()
                 pauseAmbientPlayers()
                 releaseWakeLock()
@@ -1227,6 +1297,9 @@ class StoryPlaybackService : MediaSessionService() {
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
+        // 用户主动取消：本次播放会话内不再自动挂默认定时
+        timerCancelledByUser = true
+        timerExpiredRecently = false
         fadeMultiplier = 1.0f
         fadeSpeedMultiplier = 1.0f
         exoPlayer.volume = 1.0f
@@ -1476,11 +1549,14 @@ class StoryPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        savePlaybackPosition()
+        savePlaybackPositionOnExit()
         finalizePlaybackSession("SERVICE_STOP")
         super.onDestroy()
         sleepTimerJob?.cancel()
         progressTrackingJob?.cancel()
+        manualSkipJob?.cancel()
+        // 服务被销毁时关闭协程作用域，避免 Room 观察者与定时协程继续泄漏运行
+        serviceScope.cancel()
         releaseWakeLock()
         try {
             unregisterReceiver(volumeReceiver)
@@ -1499,6 +1575,8 @@ class StoryPlaybackService : MediaSessionService() {
             release()
             mediaSession = null
         }
+        // 服务销毁后清空对外状态，避免首页迷你播放器继续显示已失效的曲目
+        updateState { StoryPlaybackState() }
     }
 
     companion object {

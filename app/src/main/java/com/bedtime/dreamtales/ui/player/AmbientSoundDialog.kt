@@ -50,7 +50,7 @@ import com.bedtime.dreamtales.core.audio.AmbientPreset
 fun AmbientSoundDialog(
     currentMix: Map<String, Float>,
     userPresets: List<AmbientPreset>,
-    onMixChanged: (Map<String, Float>) -> Unit,
+    onMixChanged: (Map<String, Float>, Boolean) -> Unit,
     onSavePreset: (String, Map<String, Float>) -> Boolean,
     onDismiss: () -> Unit
 ) {
@@ -95,7 +95,7 @@ fun AmbientSoundDialog(
                     item {
                         SuggestionChip(
                             onClick = {
-                                onMixChanged(emptyMap())
+                                onMixChanged(emptyMap(), true)
                                 savedMessage = null
                             },
                             label = { Text("🚫 关闭", style = MaterialTheme.typography.labelSmall) },
@@ -110,7 +110,7 @@ fun AmbientSoundDialog(
                     items(allPresets, key = { it.name }) { preset ->
                         SuggestionChip(
                             onClick = {
-                                onMixChanged(preset.mix)
+                                onMixChanged(preset.mix, true)
                                 savedMessage = "已应用「${preset.name}」"
                             },
                             label = { Text("🎵 ${preset.name}", style = MaterialTheme.typography.labelSmall) },
@@ -174,7 +174,7 @@ fun AmbientSoundDialog(
                                             } else {
                                                 updated.remove(track.id)
                                             }
-                                            onMixChanged(updated)
+                                            onMixChanged(updated, true)
                                             savedMessage = null
                                         },
                                         colors = SwitchDefaults.colors(
@@ -191,8 +191,13 @@ fun AmbientSoundDialog(
                                     onValueChange = { value ->
                                         val updated = currentMix.toMutableMap()
                                         updated[track.id] = value
-                                        onMixChanged(updated)
+                                        // 拖动中只实时试听，不落盘
+                                        onMixChanged(updated, false)
                                         savedMessage = null
+                                    },
+                                    onValueChangeFinished = {
+                                        // 松手时把最终混音持久化一次
+                                        onMixChanged(currentMix, true)
                                     },
                                     valueRange = 0.05f..1f,
                                     colors = SliderDefaults.colors(

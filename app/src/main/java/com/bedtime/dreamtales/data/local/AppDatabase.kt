@@ -22,9 +22,6 @@ import com.bedtime.dreamtales.data.local.entity.Story
 import com.bedtime.dreamtales.data.local.entity.StoryAudioCache
 import com.bedtime.dreamtales.data.local.entity.StoryPage
 import com.bedtime.dreamtales.data.local.entity.VoiceProfile
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Database(
     entities = [
@@ -185,33 +182,7 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_7_8
                 )
                 .fallbackToDestructiveMigration()
-                .addCallback(object : Callback() {
-                    override fun onCreate(db: SupportSQLiteDatabase) {
-                        super.onCreate(db)
-                        // 首次建库预置睡前故事及默认音色
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val database = getInstance(context)
-                            prepopulateData(database)
-                        }
-                    }
-                })
                 .build()
-        }
-
-        private suspend fun prepopulateData(db: AppDatabase) {
-            val now = System.currentTimeMillis()
-            db.storyDao().insertAll(ClassicStoriesSeed.getClassicStories())
-
-            // 预置默认 小米 MiMo 官方温暖音色
-            val v1 = VoiceProfile(
-                id = 1,
-                name = "温柔月光 · 小米原生 (MiMo TTS)",
-                cloudVoiceId = "mimo:default",
-                localSamplePath = "",
-                isDefault = true,
-                createdAt = now - 3000
-            )
-            db.voiceProfileDao().insertVoiceProfile(v1)
         }
     }
 }

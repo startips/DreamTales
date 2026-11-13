@@ -6,8 +6,10 @@ import android.util.Base64
 import com.bedtime.dreamtales.BuildConfig
 import com.bedtime.dreamtales.core.StoryPersonalization
 import com.bedtime.dreamtales.core.StorySpeechHelper
+import com.bedtime.dreamtales.core.audio.WavCompactionMarker
 import com.bedtime.dreamtales.core.audio.WavSilenceCompactor
 import com.bedtime.dreamtales.core.constants.AppConfig
+import com.bedtime.dreamtales.core.story.ClassicSeedPolicy
 import com.bedtime.dreamtales.core.story.CuratedPackStory
 import com.bedtime.dreamtales.data.api.ApiClient
 import com.bedtime.dreamtales.data.api.CpaChatRequest
@@ -41,9 +43,10 @@ class StoryRepository(private val context: Context) {
     private val voiceDao = db.voiceProfileDao()
     private val pageDao = db.storyPageDao()
     private val appConfig = AppConfig.getInstance(context)
-    private val progressRepository = PlaybackProgressRepository(context)
     private val childProfileRepository = ChildProfileRepository(context)
     private val synthesisMutex = Mutex()
+    private val insertMutex = Mutex()
+    private val seedMutex = Mutex()
 
     fun getAllStories(): Flow<List<Story>> = storyDao.getAllStories()
 
@@ -93,6 +96,7 @@ class StoryRepository(private val context: Context) {
             val cache = cacheDao.getCache(storyId, voiceProfileId)
             if (cache != null) {
                 val file = File(cache.localFilePath)
+                WavCompactionMarker.clearMarker(file)
                 if (file.exists()) file.delete()
             }
             cacheDao.deleteCache(storyId, voiceProfileId)
@@ -101,23 +105,26 @@ class StoryRepository(private val context: Context) {
     }
 
     suspend fun addStoryFromPackIfMissing(packTitle: String, sample: CuratedPackStory): Story = withContext(Dispatchers.IO) {
-        val existing = storyDao.getAllStoriesSync().firstOrNull {
-            it.title.trim() == sample.title.trim()
+        // 同一篇处方故事被连点两次时串行化，避免插入重复行
+        insertMutex.withLock {
+            val existing = storyDao.getAllStoriesSync().firstOrNull {
+                it.title.trim() == sample.title.trim()
+            }
+            if (existing != null) return@withContext existing
+            val story = sample.toStory(packTitle)
+            val id = storyDao.insertStory(story)
+            story.copy(id = id)
         }
-        if (existing != null) return@withContext existing
-        val story = sample.toStory(packTitle)
-        val id = storyDao.insertStory(story)
-        story.copy(id = id)
     }
 
     suspend fun clearAllAudioCaches(): Boolean = withContext(Dispatchers.IO) {
         try {
             cacheDao.clearAllCaches()
-            progressRepository.clearAll()
+            // 只清理音频与压缩标记；断点续播进度保留，音频重建后仍然有效
             val audioDir = File(context.filesDir, "audio_caches")
             if (audioDir.exists()) {
                 audioDir.listFiles()?.forEach { file ->
-                    if (file.name.endsWith(".wav")) {
+                    if (file.name.endsWith(".wav") || file.name.endsWith(".wav.compact") || file.name.endsWith(".tmp")) {
                         file.delete()
                     }
                 }
@@ -131,27 +138,66 @@ class StoryRepository(private val context: Context) {
     suspend fun cleanLegacyAudioCaches() = withContext(Dispatchers.IO) {
         val audioDir = File(context.filesDir, "audio_caches")
         if (!audioDir.exists()) return@withContext
-        // 清理旧版本中无 hash 的遗留音频文件，确保音频与当前包含开场白的文本完全对齐
+        // 1. 清理旧版本中无 hash 的遗留音频文件，确保音频与当前包含开场白的文本完全对齐
         audioDir.listFiles()?.forEach { file ->
             if (file.name.matches(Regex("story_\\d+_voice_\\d+\\.wav"))) {
+                WavCompactionMarker.clearMarker(file)
                 file.delete()
+            }
+        }
+        // 2. 清理指向已不存在文件的缓存记录，避免首页误显示「已就绪」
+        cacheDao.getAllCachesSync().forEach { cache ->
+            val file = File(cache.localFilePath)
+            if (!file.exists() || file.length() <= 0L) {
+                runCatching { cacheDao.deleteCache(cache.storyId, cache.voiceProfileId) }
             }
         }
     }
 
+    /**
+     * 按标题幂等补齐内置经典故事，并修复历史上因并发播种产生的重复行。
+     */
     suspend fun ensureClassicStoriesPopulated() = withContext(Dispatchers.IO) {
-        val count = storyDao.getStoryCount()
-        if (count < 11) {
-            storyDao.insertAll(com.bedtime.dreamtales.data.local.ClassicStoriesSeed.getClassicStories())
+        seedMutex.withLock {
+            val seeds = com.bedtime.dreamtales.data.local.ClassicStoriesSeed.getClassicStories()
+            val existing = storyDao.getAllStoriesSync()
+
+            val missingTitles = ClassicSeedPolicy.missingSeeds(
+                existingTitles = existing.map { it.title },
+                seedTitles = seeds.map { it.title }
+            )
+            if (missingTitles.isNotEmpty()) {
+                val missingTitleSet = missingTitles.toSet()
+                storyDao.insertAll(seeds.filter { it.title.trim() in missingTitleSet })
+            }
+
+            // 并发播种在极早期版本可能写入过多份同名经典故事，这里做一次幂等修复
+            val duplicates = ClassicSeedPolicy.duplicateIdsToRemove(
+                entries = existing.map { it.title.trim() to it.id },
+                seedTitles = seeds.map { it.title.trim() }.toSet()
+            )
+            duplicates.forEach { id ->
+                runCatching { storyDao.deleteById(id) }
+            }
         }
     }
 
     /**
-     * 后台静默预缓存前 3 篇未合成的故事，实现夜间 0 毫秒秒开（带平滑延迟保护）
+     * 前台点播时调用：立即让后台预缓存让位，避免用户等待排队中的合成任务。
+     */
+    fun prioritizeForegroundRequest() {
+        suppressPreCache = true
+    }
+
+    /**
+     * 后台静默预缓存前 3 篇未合成的故事，实现夜间 0 毫秒秒开（带平滑延迟保护）。
+     * 一旦用户在前台点播，会在当前这一篇完成后立即让位。
      */
     suspend fun preCacheUpcomingStories(voiceProfile: VoiceProfile) = withContext(Dispatchers.IO) {
+        suppressPreCache = false
         val all = storyDao.getAllStoriesSync()
         for (story in all.take(3)) {
+            if (suppressPreCache) break
             val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
             val contentHash = spokenStoryText.hashCode().toUInt().toString(16)
             val audioDir = File(context.filesDir, "audio_caches")
@@ -161,6 +207,7 @@ class StoryRepository(private val context: Context) {
             if (existing == null || !existing.isComplete || !File(existing.localFilePath).exists() || existing.localFilePath != targetFile.absolutePath) {
                 try {
                     getOrSynthesizeStoryAudio(story, voiceProfile) { /* silent */ }
+                    if (suppressPreCache) break
                     delay(3000L)
                 } catch (e: Exception) {
                     // silent fail in background
@@ -191,8 +238,8 @@ class StoryRepository(private val context: Context) {
         if (existingCache != null && existingCache.isComplete) {
             val file = File(existingCache.localFilePath)
             if (file.exists() && file.length() > 0 && file.absolutePath == targetFile.absolutePath) {
-                // 修复历史缓存中 TTS 插入的超长空白，下一次播放即生效
-                WavSilenceCompactor.compactInPlace(file)
+                // 历史缓存只在首次播放时压缩一次，后续直接命中
+                WavCompactionMarker.compactOnce(file)
                 onProgress(100)
                 return@withContext file.absolutePath
             } else {
@@ -211,7 +258,7 @@ class StoryRepository(private val context: Context) {
             if (doubleCheck != null && doubleCheck.isComplete) {
                 val cachedFile = File(doubleCheck.localFilePath)
                 if (cachedFile.exists() && cachedFile.length() > 0 && cachedFile.absolutePath == targetFile.absolutePath) {
-                    WavSilenceCompactor.compactInPlace(cachedFile)
+                    WavCompactionMarker.compactOnce(cachedFile)
                     onProgress(100)
                     return@withContext cachedFile.absolutePath
                 }
@@ -653,6 +700,10 @@ class StoryRepository(private val context: Context) {
         const val ACTION_FAVORITE_CHANGED = "com.bedtime.dreamtales.action.FAVORITE_CHANGED"
         const val EXTRA_STORY_ID = "com.bedtime.dreamtales.extra.STORY_ID"
         const val EXTRA_IS_FAVORITE = "com.bedtime.dreamtales.extra.IS_FAVORITE"
+
+        /** 前台点播优先：进程内共享，后台预缓存协程据此立即让位。 */
+        @Volatile
+        private var suppressPreCache = false
     }
 }
 

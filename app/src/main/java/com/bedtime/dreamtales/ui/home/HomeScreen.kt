@@ -242,17 +242,17 @@ fun HomeScreen(
     }
 
     // 晚安提醒通知里的「开始今晚故事」：等数据就绪后自动开播故事单
-    LaunchedEffect(pendingStartTonightQueue, stories, defaultVoice, tonightQueue) {
+    // 直接读数据库同步快照判断是否为空，不再靠延时猜测，避免慢设备误报「故事单为空」
+    LaunchedEffect(pendingStartTonightQueue, stories, defaultVoice) {
         if (!pendingStartTonightQueue) return@LaunchedEffect
         if (stories.isEmpty() || defaultVoice == null) return@LaunchedEffect
-        // 给故事单 Flow 一个短暂的加载窗口，避免刚启动时误判为空
-        delay(600L)
         onStartTonightQueueConsumed()
-        if (tonightQueue.isNotEmpty()) {
-            viewModel.playTonightQueue(onNavigateToPlayer)
-        } else {
-            Toast.makeText(context, "今晚故事单还是空的，先挑几篇吧", Toast.LENGTH_SHORT).show()
-        }
+        viewModel.playTonightQueue(
+            onNavigateToPlayer = onNavigateToPlayer,
+            onEmpty = {
+                Toast.makeText(context, "今晚故事单还是空的，先挑几篇吧", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
     val updateManager = remember { AppUpdateManager(context) }
@@ -2230,7 +2230,11 @@ fun HomeScreen(
             profiles = childProfiles,
             selectedChildId = selectedReportChildId,
             onSelectChild = { viewModel.selectReportChild(it) },
-            onDismiss = { showSleepReportDialog = false }
+            onDismiss = {
+                showSleepReportDialog = false
+                // 关闭周报后恢复「全部」口径，避免设置页摘要沿用某个宝宝的数字却无标注
+                viewModel.selectReportChild(null)
+            }
         )
     }
 

@@ -82,6 +82,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,10 +96,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.bedtime.dreamtales.core.StorySpeechHelper
 import com.bedtime.dreamtales.core.audio.AmbientMix
 import com.bedtime.dreamtales.core.constants.AppConstants
@@ -128,6 +132,8 @@ fun SleepPlayerScreen(
     val storyPages by viewModel.storyPages.collectAsState()
     val storyPagesState by viewModel.storyPagesState.collectAsState()
     val isFaceDown by flipSensorManager.isFaceDown.collectAsState()
+    // pointerInput 是长驻手势协程，必须用 rememberUpdatedState 读取最新播放状态
+    val latestPlaybackState by rememberUpdatedState(playbackState)
 
     var activeTab by remember { mutableIntStateOf(0) } // 0: 🖼️ 绘本插图, 1: 📖 绘本跟读, 2: 📚 连环画
     var showAmbientSheet by remember { mutableStateOf(false) }
@@ -152,10 +158,34 @@ fun SleepPlayerScreen(
         }
     }
 
-    // 监听翻转扣屏感应：仅在播放界面按需启动传感器，离开播放页时停止监听并恢复自然亮度
-    DisposableEffect(Unit) {
-        flipSensorManager.startListening()
+    // 监听翻转扣屏感应：跟随页面生命周期启停。
+    // 之前只在首次组合时启动，MainActivity.onPause 停掉传感器后回到前台不会重启，
+    // 会导致下拉通知栏/切后台再回来后「翻转扣屏」彻底失效。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    flipSensorManager.startListening()
+                    FlipSensorManager.applyWindowBrightness(
+                        activity,
+                        flipSensorManager.isFaceDown.value
+                    )
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    flipSensorManager.stopListening()
+                    FlipSensorManager.applyWindowBrightness(activity, false)
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        // 首次进入页面时如果已处于 RESUMED，直接启动
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            flipSensorManager.startListening()
+        }
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             flipSensorManager.stopListening()
             FlipSensorManager.applyWindowBrightness(activity, false)
         }
@@ -181,7 +211,12 @@ fun SleepPlayerScreen(
                         }
                         if (event.changes.all { !it.pressed }) {
                             if (twoFingersDetected) {
-                                viewModel.togglePlayPause()
+                                val snapshot = latestPlaybackState
+                                if (snapshot.isAmbientOnly && snapshot.ambientMix.isEmpty() && !snapshot.isPlaying) {
+                                    Toast.makeText(context, "先选择至少一条声景", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.togglePlayPause()
+                                }
                             }
                             break
                         }
@@ -224,7 +259,14 @@ fun SleepPlayerScreen(
                     playbackState = playbackState,
                     onOpenAmbient = { showAmbientSheet = true },
                     onOpenTimer = { showTimerDialog = true },
-                    onTogglePlayPause = { viewModel.togglePlayPause() }
+                    onTogglePlayPause = {
+                        // 空音轨时按钮不再「静默无效」，给家长明确提示
+                        if (playbackState.ambientMix.isEmpty() && !playbackState.isPlaying) {
+                            Toast.makeText(context, "先点「助眠背景」选择至少一条声景", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.togglePlayPause()
+                        }
+                    }
                 )
             } else {
             Column(
@@ -691,7 +733,7 @@ fun SleepPlayerScreen(
             AmbientSoundDialog(
                 currentMix = playbackState.ambientMix,
                 userPresets = viewModel.getAmbientPresets(),
-                onMixChanged = { mix -> viewModel.setAmbientMix(mix) },
+                onMixChanged = { mix, persist -> viewModel.setAmbientMix(mix, persist) },
                 onSavePreset = { name, mix -> viewModel.saveAmbientPreset(name, mix) },
                 onDismiss = { showAmbientSheet = false }
             )

@@ -114,8 +114,8 @@ class SleepPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playbackService?.setAmbientTrack(trackId, volume)
     }
 
-    fun setAmbientMix(mix: Map<String, Float>) {
-        playbackService?.setAmbientMix(mix)
+    fun setAmbientMix(mix: Map<String, Float>, persist: Boolean = true) {
+        playbackService?.setAmbientMix(mix, persist)
     }
 
     fun getAmbientPresets(): List<AmbientPreset> = appConfig.getAmbientPresets()
