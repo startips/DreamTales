@@ -34,7 +34,8 @@ data class LanShareDevice(
 
 data class LanShareServerInfo(
     val deviceName: String,
-    val port: Int
+    val port: Int,
+    val pairCode: String = ""
 )
 
 /**
@@ -57,10 +58,15 @@ class LanShareServer(private val context: Context) {
     @Volatile
     private var registeredName: String = defaultDeviceName()
 
+    /** 本次分享会话的 4 位配对码，接收端必须提供才能拉取分享包。 */
+    @Volatile
+    private var pairCode: String = ""
+
     fun start(): LanShareServerInfo {
         if (running) {
-            return LanShareServerInfo(registeredName, serverSocket?.localPort ?: 0)
+            return LanShareServerInfo(registeredName, serverSocket?.localPort ?: 0, pairCode)
         }
+        pairCode = ShareBundleProtocol.generatePairCode()
         val socket = ServerSocket(0)
         serverSocket = socket
         running = true
@@ -76,7 +82,7 @@ class LanShareServer(private val context: Context) {
                 launch { handleClient(client) }
             }
         }
-        return LanShareServerInfo(registeredName, socket.localPort)
+        return LanShareServerInfo(registeredName, socket.localPort, pairCode)
     }
 
     fun stop() {
@@ -161,12 +167,23 @@ class LanShareServer(private val context: Context) {
                 socket.soTimeout = 15_000
                 val input = socket.getInputStream().bufferedReader(Charsets.UTF_8)
                 val requestLine = input.readLine().orEmpty()
-                val path = requestLine.split(' ').getOrNull(1).orEmpty()
+                val rawTarget = requestLine.split(' ').getOrNull(1).orEmpty()
                 // 消费请求头
                 while (true) {
                     val line = input.readLine() ?: break
                     if (line.isEmpty()) break
                 }
+
+                val path = rawTarget.substringBefore('?')
+                val query = rawTarget.substringAfter('?', "")
+                val providedCode = query.split('&')
+                    .mapNotNull { part ->
+                        val pieces = part.split('=', limit = 2)
+                        if (pieces.size == 2 && pieces[0] == ShareBundleProtocol.CODE_QUERY) {
+                            pieces[1]
+                        } else null
+                    }
+                    .firstOrNull()
 
                 val output = BufferedOutputStream(socket.getOutputStream())
                 when {
@@ -177,11 +194,18 @@ class LanShareServer(private val context: Context) {
                         output.write(body)
                     }
                     path.startsWith(ShareBundleProtocol.BUNDLE_PATH) -> {
-                        val bundle = repository.buildBundle(registeredName)
-                        val bytes = bundle.readBytes()
-                        writeHeaders(output, 200, ShareBundleProtocol.MIME_ZIP, bytes.size)
-                        output.write(bytes)
-                        bundle.delete()
+                        // 必须携带正确配对码，避免同 Wi-Fi 下任意设备静默拉走家长音色样本
+                        if (pairCode.isBlank() || providedCode != pairCode) {
+                            val body = "配对码不正确".toByteArray(Charsets.UTF_8)
+                            writeHeaders(output, 403, "text/plain; charset=utf-8", body.size)
+                            output.write(body)
+                        } else {
+                            val bundle = repository.buildBundle(registeredName)
+                            val bytes = bundle.readBytes()
+                            writeHeaders(output, 200, ShareBundleProtocol.MIME_ZIP, bytes.size)
+                            output.write(bytes)
+                            bundle.delete()
+                        }
                     }
                     else -> {
                         val body = "Not Found".toByteArray(Charsets.UTF_8)
@@ -339,9 +363,10 @@ class LanShareManager(context: Context) {
 
     suspend fun downloadAndImport(
         device: LanShareDevice,
+        pairCode: String,
         onProgress: (Int) -> Unit = {}
     ): ShareImportResult = withContext(Dispatchers.IO) {
-        val url = URL(ShareBundleProtocol.downloadUrl(device.host, device.port))
+        val url = URL(ShareBundleProtocol.downloadUrl(device.host, device.port, pairCode))
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 8_000
         connection.readTimeout = 60_000
@@ -349,6 +374,9 @@ class LanShareManager(context: Context) {
         connection.setRequestProperty("Accept", ShareBundleProtocol.MIME_ZIP)
 
         try {
+            if (connection.responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
+                throw RuntimeException("配对码不正确，请核对对方设备上显示的 4 位数字")
+            }
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 throw RuntimeException("对方设备返回 HTTP ${connection.responseCode}")
             }

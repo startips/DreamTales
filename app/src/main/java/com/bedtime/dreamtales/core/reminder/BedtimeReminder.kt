@@ -16,7 +16,7 @@ data class BedtimeReminderSettings(
 }
 
 /**
- * 计算下一次提醒时间。使用不精确闹钟，允许系统在省电策略下小幅延迟。
+ * 计算下一次提醒时间。使用系统闹钟通道，正常不会延迟。
  */
 object BedtimeReminderCalculator {
 

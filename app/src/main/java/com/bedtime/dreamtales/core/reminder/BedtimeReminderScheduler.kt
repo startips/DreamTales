@@ -17,8 +17,8 @@ import com.bedtime.dreamtales.R
 import com.bedtime.dreamtales.core.constants.AppConfig
 
 /**
- * 晚安提醒：使用不精确闹钟，避免申请 SCHEDULE_EXACT_ALARM。
- * 到点后由 [BedtimeReminderReceiver] 发通知，并自动安排下一天。
+ * 晚安提醒：使用系统闹钟通道（setAlarmClock）保证准点，
+ * 免申请 SCHEDULE_EXACT_ALARM，且在 Doze 省电模式下仍能精确触发。
  */
 object BedtimeReminderScheduler {
 
@@ -53,8 +53,29 @@ object BedtimeReminderScheduler {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        runCatching {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+        // 用 setAlarmClock 保证准点：它免额外权限、可在 Doze 下精确触发，
+        // 而 setAndAllowWhileIdle 的系统窗口可达 1 小时，晚安提醒会明显迟到。
+        val showIntent = PendingIntent.getActivity(
+            context,
+            REQUEST_CODE_OPEN,
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_FIRE
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val scheduled = runCatching {
+            alarmManager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(triggerAt, showIntent),
+                pendingIntent
+            )
+        }.isSuccess
+
+        if (!scheduled) {
+            // 极少数 ROM 不支持 setAlarmClock 时降级为「尽力准点」，至少仍能提醒
+            runCatching {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            }
         }
     }
 

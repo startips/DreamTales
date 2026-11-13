@@ -3,7 +3,9 @@ package com.bedtime.dreamtales.ui.settings
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -26,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.runtime.Composable
@@ -38,13 +43,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.bedtime.dreamtales.core.share.ShareBundleProtocol
 import com.bedtime.dreamtales.data.share.LanShareDevice
 import com.bedtime.dreamtales.data.share.LanShareManager
 import com.bedtime.dreamtales.widget.DreamTalesWidgetProvider
@@ -64,6 +73,8 @@ fun LanShareDialog(onDismiss: () -> Unit) {
     var mode by remember { mutableIntStateOf(0) } // 0 发送 / 1 接收
     var serving by remember { mutableStateOf(false) }
     var serverPort by remember { mutableStateOf(0) }
+    var pairCode by remember { mutableStateOf("") }
+    var inputCode by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
     var devices by remember { mutableStateOf<List<LanShareDevice>>(emptyList()) }
     var importingDevice by remember { mutableStateOf<LanShareDevice?>(null) }
@@ -83,6 +94,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                 serving = false
                 scanning = false
                 serverPort = 0
+                pairCode = ""
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -114,7 +126,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "两台设备连接同一 Wi-Fi，即可互传故事文本、封面和音色样本。全程仅在家庭局域网内传输，不经过云端。请只在可信的家庭 Wi-Fi 下使用。",
+                    text = "两台设备连接同一 Wi-Fi，即可互传故事文本、封面和音色样本。全程仅在家庭局域网内传输，不经过云端。接收端需输入发送端显示的 4 位配对码，请只在可信的家庭 Wi-Fi 下使用。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
@@ -170,6 +182,41 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (serving && pairCode.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Surface(
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "配对码",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = pairCode.toCharArray().joinToString(" "),
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 4.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "把这 4 位数字告诉接收方；配对码每次开启分享都会重新生成。",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Spacer(modifier = Modifier.height(10.dp))
                             Button(
                                 onClick = {
@@ -178,6 +225,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                         manager.stopServing()
                                         serving = false
                                         serverPort = 0
+                                        pairCode = ""
                                     } else {
                                         if (!hasLocalLan(context)) {
                                             message = "当前未连接 Wi-Fi，请先连接家庭 Wi-Fi 后再开启分享"
@@ -188,6 +236,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                                         manager.startServing()
                                                     }
                                                     serverPort = info.port
+                                                    pairCode = info.pairCode
                                                     serving = true
                                                 } catch (e: Exception) {
                                                     message = "开启分享失败：${e.message}"
@@ -278,6 +327,69 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                         )
                     }
 
+                    // 配对码输入（无描边扁平输入框）
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (ShareBundleProtocol.isValidPairCode(inputCode)) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🔑",
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                if (inputCode.isEmpty()) {
+                                    Text(
+                                        text = "输入发送端显示的 4 位配对码",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                BasicTextField(
+                                    value = inputCode,
+                                    onValueChange = { raw ->
+                                        inputCode = raw.filter { it.isDigit() }.take(4)
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.NumberPassword
+                                    ),
+                                    textStyle = MaterialTheme.typography.titleSmall.copy(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        letterSpacing = 3.sp
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (inputCode.isNotEmpty()) {
+                                Text(
+                                    text = "清除",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { inputCode = "" }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
                     devices.forEach { device ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -311,9 +423,10 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                         importingDevice = device
                                         progress = 0
                                         message = null
+                                        val code = inputCode
                                         scope.launch {
                                             try {
-                                                val result = manager.downloadAndImport(device) { value ->
+                                                val result = manager.downloadAndImport(device, code) { value ->
                                                     scope.launch { progress = value }
                                                 }
                                                 message = "接收完成：故事 +${result.storiesImported}（跳过 ${result.storiesSkipped}），音色 +${result.voicesImported}（跳过 ${result.voicesSkipped}）"
@@ -327,7 +440,7 @@ fun LanShareDialog(onDismiss: () -> Unit) {
                                         }
                                     },
                                     shape = CircleShape,
-                                    enabled = importingDevice == null
+                                    enabled = importingDevice == null && ShareBundleProtocol.isValidPairCode(inputCode)
                                 ) {
                                     Text("接收", style = MaterialTheme.typography.labelMedium)
                                 }

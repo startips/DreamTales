@@ -220,7 +220,7 @@ fun SettingsDialog(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (bedtimeReminder.enabled) {
-                                    "每天 ${bedtimeReminder.label} 提醒"
+                                    "每天 ${bedtimeReminder.label} 准点提醒"
                                 } else {
                                     "固定时间提醒准备睡前故事"
                                 },
@@ -231,7 +231,7 @@ fun SettingsDialog(
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (bedtimeReminder.enabled) {
-                                    "到点会收到一条温柔通知，不会自动播放"
+                                    "以系统闹钟准点触发，不受省电延迟影响"
                                 } else {
                                     "开启后，月眠会在固定时间轻轻提醒你"
                                 },

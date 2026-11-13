@@ -109,7 +109,10 @@ data class StoryPlaybackState(
     val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
     val ambientSound: AmbientSound = AmbientSound.OFF,
     val ambientVolume: Float = 0.25f,
-    val ambientMix: Map<String, Float> = emptyMap()
+    val ambientMix: Map<String, Float> = emptyMap(),
+    /** 自动连播切到未缓存故事时，正在后台合成音频 */
+    val isPreparingStory: Boolean = false,
+    val preparingStoryTitle: String = ""
 )
 
 @SuppressLint("UnsafeOptInUsageError")
@@ -128,6 +131,7 @@ class StoryPlaybackService : MediaSessionService() {
     private var sleepTimerJob: Job? = null
     private var progressTrackingJob: Job? = null
     private var manualSkipJob: Job? = null
+    private var prefetchJob: Job? = null
 
     // 睡眠定时状态机：区分「系统默认挂载」「用户主动取消」「定时刚归零」
     private var timerCancelledByUser = false
@@ -601,7 +605,31 @@ class StoryPlaybackService : MediaSessionService() {
         // 用户手动取消后也不会被重新挂回来。
         armDefaultTimerIfNeeded(viaAutoAdvance)
 
+        // 播放稳定 10 秒后，后台预取「今晚故事单」的下一首，避免连播切歌时现合成
+        if (!viaAutoAdvance) {
+            scheduleNextQueuePrefetch(storyId)
+        }
+
         updateNotification(storyTitle, isPlaying = autoPlay)
+    }
+
+    /**
+     * 预取队列里的下一首（低优先级：延迟 10 秒、前台点播时让位）。
+     */
+    private fun scheduleNextQueuePrefetch(currentStoryId: Long) {
+        prefetchJob?.cancel()
+        prefetchJob = serviceScope.launch {
+            delay(10_000L)
+            if (storyRepository.isPreCacheSuppressed()) return@launch
+            val ids = queueRepository.getStoryIdsSync()
+            val index = PlaybackQueuePolicy.indexOf(ids, currentStoryId)
+            if (index < 0) return@launch
+            val next = PlaybackQueuePolicy.nextIndex(index, ids.size) ?: return@launch
+            val story = storyRepository.getStoryById(ids[next]) ?: return@launch
+            val voice = voiceRepository.getDefaultVoiceProfileSync() ?: return@launch
+            if (storyRepository.hasCachedAudio(story, voice)) return@launch
+            runCatching { storyRepository.getOrSynthesizeStoryAudio(story, voice) }
+        }
     }
 
     /**
@@ -632,6 +660,7 @@ class StoryPlaybackService : MediaSessionService() {
             savePlaybackPosition()
             finalizePlaybackSession("SWITCHED")
         }
+        prefetchJob?.cancel()
 
         fadeMultiplier = 1.0f
         fadeSpeedMultiplier = 1.0f
@@ -1002,8 +1031,14 @@ class StoryPlaybackService : MediaSessionService() {
         }
         val defaultVoice = voiceRepository.getDefaultVoiceProfileSync() ?: return false
         return try {
+            // 未缓存时先给出「正在准备」状态，避免连播切歌时几秒静默像卡死
+            val needSynthesis = !storyRepository.hasCachedAudio(story, defaultVoice)
+            if (needSynthesis) {
+                setPreparing(story.title)
+            }
             val filePath = storyRepository.getOrSynthesizeStoryAudio(story, defaultVoice)
             storyRepository.recordStoryPlayed(story.id)
+            setPreparing(null)
             playStoryAudio(
                 storyId = story.id,
                 storyTitle = story.title,
@@ -1014,7 +1049,20 @@ class StoryPlaybackService : MediaSessionService() {
             )
             true
         } catch (e: Exception) {
+            setPreparing(null)
             false
+        }
+    }
+
+    private fun setPreparing(title: String?) {
+        updateState {
+            it.copy(
+                isPreparingStory = title != null,
+                preparingStoryTitle = title ?: ""
+            )
+        }
+        if (title != null) {
+            updateNotification("正在准备《$title》", isPlaying = false)
         }
     }
 
@@ -1555,6 +1603,7 @@ class StoryPlaybackService : MediaSessionService() {
         sleepTimerJob?.cancel()
         progressTrackingJob?.cancel()
         manualSkipJob?.cancel()
+        prefetchJob?.cancel()
         // 服务被销毁时关闭协程作用域，避免 Room 观察者与定时协程继续泄漏运行
         serviceScope.cancel()
         releaseWakeLock()

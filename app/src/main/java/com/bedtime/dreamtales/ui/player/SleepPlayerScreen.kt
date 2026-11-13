@@ -290,9 +290,15 @@ fun SleepPlayerScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (playbackState.isPlaying) "🌙 正在安抚伴读" else "伴读就绪 · 待命中",
+                        text = when {
+                            playbackState.isPreparingStory ->
+                                "🪄 正在准备《${playbackState.preparingStoryTitle}》…"
+                            playbackState.isPlaying -> "🌙 正在安抚伴读"
+                            else -> "伴读就绪 · 待命中"
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (playbackState.isPreparingStory) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))

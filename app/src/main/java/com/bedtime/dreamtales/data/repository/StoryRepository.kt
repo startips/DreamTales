@@ -184,9 +184,28 @@ class StoryRepository(private val context: Context) {
 
     /**
      * 前台点播时调用：立即让后台预缓存让位，避免用户等待排队中的合成任务。
+     * 采用「最近 8 秒内有前台点播」的窗口判断，既能抢占，又不会永久关闭后台预取。
      */
     fun prioritizeForegroundRequest() {
-        suppressPreCache = true
+        foregroundRequestAt = System.currentTimeMillis()
+    }
+
+    fun isPreCacheSuppressed(): Boolean {
+        val at = foregroundRequestAt
+        return at > 0L && System.currentTimeMillis() - at < 8_000L
+    }
+
+    /**
+     * 当前音色下是否已有可用（文件存在且哈希一致）的本地音频。
+     */
+    suspend fun hasCachedAudio(story: Story, voiceProfile: VoiceProfile): Boolean = withContext(Dispatchers.IO) {
+        val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
+        val contentHash = spokenStoryText.hashCode().toUInt().toString(16)
+        val targetFile = File(context.filesDir, "audio_caches/story_${story.id}_voice_${voiceProfile.id}_$contentHash.wav")
+        val cache = cacheDao.getCache(story.id, voiceProfile.id)
+        cache != null && cache.isComplete &&
+            cache.localFilePath == targetFile.absolutePath &&
+            File(cache.localFilePath).let { it.exists() && it.length() > 0L }
     }
 
     /**
@@ -194,10 +213,9 @@ class StoryRepository(private val context: Context) {
      * 一旦用户在前台点播，会在当前这一篇完成后立即让位。
      */
     suspend fun preCacheUpcomingStories(voiceProfile: VoiceProfile) = withContext(Dispatchers.IO) {
-        suppressPreCache = false
         val all = storyDao.getAllStoriesSync()
         for (story in all.take(3)) {
-            if (suppressPreCache) break
+            if (isPreCacheSuppressed()) break
             val spokenStoryText = StorySpeechHelper.buildFullSpokenStoryText(story.title, story.content)
             val contentHash = spokenStoryText.hashCode().toUInt().toString(16)
             val audioDir = File(context.filesDir, "audio_caches")
@@ -207,7 +225,7 @@ class StoryRepository(private val context: Context) {
             if (existing == null || !existing.isComplete || !File(existing.localFilePath).exists() || existing.localFilePath != targetFile.absolutePath) {
                 try {
                     getOrSynthesizeStoryAudio(story, voiceProfile) { /* silent */ }
-                    if (suppressPreCache) break
+                    if (isPreCacheSuppressed()) break
                     delay(3000L)
                 } catch (e: Exception) {
                     // silent fail in background
@@ -703,7 +721,7 @@ class StoryRepository(private val context: Context) {
 
         /** 前台点播优先：进程内共享，后台预缓存协程据此立即让位。 */
         @Volatile
-        private var suppressPreCache = false
+        private var foregroundRequestAt: Long = 0L
     }
 }
 

@@ -54,6 +54,16 @@ object ShareBundleProtocol {
     const val DEFAULT_PORT = 0 // 0 = 由系统分配空闲端口
     const val MIME_ZIP = "application/zip"
     const val MIME_JSON = "application/json"
+    const val CODE_QUERY = "code"
+
+    /** 生成 4 位配对码：只允许同一家庭网络内、知道配对码的设备拉取分享包。 */
+    fun generatePairCode(random: java.util.Random = java.util.Random()): String {
+        return (1000 + random.nextInt(9000)).toString()
+    }
+
+    fun isValidPairCode(code: String?): Boolean {
+        return code != null && code.length == 4 && code.all { it.isDigit() }
+    }
 
     fun storyKey(title: String): String = title.trim().lowercase()
     fun voiceKey(name: String, cloudVoiceId: String): String =
@@ -92,9 +102,10 @@ object ShareBundleProtocol {
         )
     }
 
-    fun downloadUrl(host: String, port: Int): String {
+    fun downloadUrl(host: String, port: Int, pairCode: String = ""): String {
         val safeHost = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
-        return "http://$safeHost:$port$BUNDLE_PATH"
+        val query = if (pairCode.isBlank()) "" else "?$CODE_QUERY=${encodeQueryValue(pairCode)}"
+        return "http://$safeHost:$port$BUNDLE_PATH$query"
     }
 
     fun deviceLabel(deviceName: String?): String {

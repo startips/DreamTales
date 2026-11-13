@@ -2658,7 +2658,9 @@ private fun BottomMiniPlayer(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     val isAmbient = playbackState.isAmbientOnly
-                    val timerText = if (playbackState.isTimerActive && playbackState.remainingTimerSeconds > 0) {
+                    val timerText = if (playbackState.isPreparingStory) {
+                        "🪄 正在准备《${playbackState.preparingStoryTitle}》…"
+                    } else if (playbackState.isTimerActive && playbackState.remainingTimerSeconds > 0) {
                         val label = if (isAmbient) "🌿 声景倒计时" else "🌙 伴读倒计时"
                         if (playbackState.isPlaying) {
                             "$label ${formatSeconds(playbackState.remainingTimerSeconds)} · 轻点展开"
@@ -2679,7 +2681,8 @@ private fun BottomMiniPlayer(
                     Text(
                         text = timerText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (playbackState.isPreparingStory) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
