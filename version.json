@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.3.4",
-  "name": "v2.3.4",
-  "versionName": "2.3.4",
-  "versionCode": 20,
-  "body": "月眠 2.3.4 · 准点提醒与安全互传\n\n- **晚安提醒改为系统闹钟通道**：到点准点触发，不再受省电策略延迟影响（无需额外权限）\n- **家庭互传新增 4 位配对码**：发送端显示配对码，接收端输入后才能拉取分享包，避免同 Wi-Fi 下任意设备静默下载家长音色样本\n- **连播切歌不再静默等**：切到未缓存故事时，播放页与迷你播放器显示「正在准备《…》」，并在开播 10 秒后自动离线「今晚故事单」的下一首\n- 设置页提醒文案同步为「准点提醒」",
-  "published_at": "2026-11-13T17:20:13Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.4/DreamTales-v2.3.4.apk",
-  "apkName": "DreamTales-v2.3.4.apk",
-  "apkSizeBytes": 18268120,
+  "tag_name": "v2.3.5",
+  "name": "v2.3.5",
+  "versionName": "2.3.5",
+  "versionCode": 21,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.4...v2.3.5",
+  "published_at": "2026-11-13T17:45:33Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.5/DreamTales-v2.3.5.apk",
+  "apkName": "DreamTales-v2.3.5.apk",
+  "apkSizeBytes": 18268180,
   "assets": [
     {
-      "name": "DreamTales-v2.3.4.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.4/DreamTales-v2.3.4.apk",
-      "size": 18268120
+      "name": "DreamTales-v2.3.5.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.5/DreamTales-v2.3.5.apk",
+      "size": 18268180
     }
   ]
 }
