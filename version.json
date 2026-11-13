@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.3.3",
-  "name": "v2.3.3",
-  "versionName": "2.3.3",
-  "versionCode": 19,
-  "body": "月眠 2.3.3 · 稳定性与逻辑修复\n\n- **修复睡眠定时状态机**：手动「关闭定时」后不会再被下一首偷偷重新打开；定时归零时也不会再自动连播下一篇；归零后手动续播会恢复上次选择的定时\n- **修复翻转扣屏失效**：下拉通知栏或切到后台再回来，翻转熄屏防误触不再失效\n- **修复全新安装可能重复内置故事**：经典故事播种改为按标题幂等并自动修复历史重复行\n- **播放健壮性**：音频文件失效时不再崩溃，改为温和提示重新点播\n- **性能**：已缓存音频只在首次播放时做一次静音压缩；混音滑杆拖动不再逐帧写加密配置\n- **数据**：「清理缓存」不再顺带清空断点续播进度；删除音色不再误删其他音色缓存\n- **服务生命周期**：销毁时释放协程与传感器监听、保存最后进度并清空过期状态\n- **体验**：处方故事连点不再重复入库；纯声景空音轨点击有明确提示；提醒的「开始今晚故事」不再因加载延迟误报为空",
-  "published_at": "2026-11-13T16:57:55Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.3/DreamTales-v2.3.3.apk",
-  "apkName": "DreamTales-v2.3.3.apk",
-  "apkSizeBytes": 18251736,
+  "tag_name": "v2.3.4",
+  "name": "v2.3.4",
+  "versionName": "2.3.4",
+  "versionCode": 20,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.3...v2.3.4",
+  "published_at": "2026-11-13T17:20:13Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.4/DreamTales-v2.3.4.apk",
+  "apkName": "DreamTales-v2.3.4.apk",
+  "apkSizeBytes": 18268120,
   "assets": [
     {
-      "name": "DreamTales-v2.3.3.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.3/DreamTales-v2.3.3.apk",
-      "size": 18251736
+      "name": "DreamTales-v2.3.4.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.4/DreamTales-v2.3.4.apk",
+      "size": 18268120
     }
   ]
 }
