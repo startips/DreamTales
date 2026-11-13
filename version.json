@@ -3,7 +3,7 @@
   "name": "v2.3.5",
   "versionName": "2.3.5",
   "versionCode": 21,
-  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.4...v2.3.5",
+  "body": "月眠 2.3.5 · 准点提醒与互传安全\n\n- **晚安提醒真正准点**：接入系统「闹钟和提醒」权限，授予后使用精确闹钟（窗口 0），不再受省电延迟影响；未授予时自动退回系统闹钟通道与兜底方案\n- **设置页提醒权限提示**：未授权时显示「提醒可能延迟（最长约 1 小时）」并提供「开启准点提醒权限」一键跳转；从系统设置返回后状态自动刷新，授权后立即重排为精确闹钟\n- **家庭互传 4 位配对码**：发送端显示配对码，接收端输入后才能拉取分享包；无码/错码请求直接返回 403\n- **连播切歌不再静默**：切到未缓存故事时，播放页与迷你播放器显示「正在准备《…》」，并在开播 10 秒后后台离线下一首",
   "published_at": "2026-11-13T17:45:33Z",
   "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.5/DreamTales-v2.3.5.apk",
   "apkName": "DreamTales-v2.3.5.apk",
