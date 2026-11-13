@@ -1,18 +1,18 @@
 {
-  "tag_name": "v2.3.2",
-  "name": "v2.3.2",
-  "versionName": "2.3.2",
-  "versionCode": 18,
-  "body": "月眠 2.3.2 · 故事处方与音频体验补丁\n\n- **处方故事离线状态明确**：故事处方包弹窗直观标示每篇音频状态（`已离线` 可秒开播放，`需合成` 首次需联网合成）；所有处方故事正文均内置离线\n- **一键离线本包全部音频**：处方包弹窗内新增「提前离线本包全部音频（夜间免等待）」按钮，后台按序合成缓存\n- **全局合成进度悬浮提示**：首次合成音频时，首页顶部常驻显示进度卡片与提示，合成完成自动进入播放器开播\n- **直达伴读播放**：从故事卡片、全文阅读弹窗或故事处方点击播放时自动开播",
-  "published_at": "2026-11-12T15:02:14Z",
-  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.2/DreamTales-v2.3.2.apk",
-  "apkName": "DreamTales-v2.3.2.apk",
-  "apkSizeBytes": 18251740,
+  "tag_name": "v2.3.3",
+  "name": "v2.3.3",
+  "versionName": "2.3.3",
+  "versionCode": 19,
+  "body": "**Full Changelog**: https://github.com/startips/DreamTales/compare/v2.3.2...v2.3.3",
+  "published_at": "2026-11-13T16:57:55Z",
+  "downloadUrl": "https://github.com/startips/DreamTales/releases/download/v2.3.3/DreamTales-v2.3.3.apk",
+  "apkName": "DreamTales-v2.3.3.apk",
+  "apkSizeBytes": 18251736,
   "assets": [
     {
-      "name": "DreamTales-v2.3.2.apk",
-      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.2/DreamTales-v2.3.2.apk",
-      "size": 18251740
+      "name": "DreamTales-v2.3.3.apk",
+      "browser_download_url": "https://github.com/startips/DreamTales/releases/download/v2.3.3/DreamTales-v2.3.3.apk",
+      "size": 18251736
     }
   ]
 }
