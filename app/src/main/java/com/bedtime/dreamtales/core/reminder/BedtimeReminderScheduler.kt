@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -17,10 +18,15 @@ import com.bedtime.dreamtales.R
 import com.bedtime.dreamtales.core.constants.AppConfig
 
 /**
- * 晚安提醒：使用系统闹钟通道（setAlarmClock）保证准点，
- * 免申请 SCHEDULE_EXACT_ALARM，且在 Doze 省电模式下仍能精确触发。
+ * 晚安提醒调度：三级保证「准点」。
+ *
+ * 1. 已授予「闹钟和提醒」特殊权限时：`setExactAndAllowWhileIdle`（window=0，Doze 下仍精确）；
+ * 2. 未授予时先尝试系统闹钟通道 `setAlarmClock`（免权限，但部分 ROM 会降级）；
+ * 3. 最终兜底 `setAndAllowWhileIdle`（系统窗口最长 1 小时）。
  */
 object BedtimeReminderScheduler {
+
+    private const val TAG = "BedtimeReminder"
 
     const val ACTION_FIRE = "com.bedtime.dreamtales.action.BEDTIME_REMINDER"
     const val ACTION_START_TONIGHT_QUEUE = "com.bedtime.dreamtales.action.START_TONIGHT_QUEUE"
@@ -31,6 +37,13 @@ object BedtimeReminderScheduler {
     private const val REQUEST_CODE_ALARM = 3001
     private const val REQUEST_CODE_OPEN = 3002
     private const val REQUEST_CODE_START = 3003
+
+    /** 当前是否已获得精确闹钟（闹钟和提醒）特殊权限。 */
+    fun canScheduleExactAlarms(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
+        return runCatching { alarmManager.canScheduleExactAlarms() }.getOrDefault(false)
+    }
 
     fun schedule(context: Context) {
         val appConfig = AppConfig.getInstance(context)
@@ -53,8 +66,16 @@ object BedtimeReminderScheduler {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 用 setAlarmClock 保证准点：它免额外权限、可在 Doze 下精确触发，
-        // 而 setAndAllowWhileIdle 的系统窗口可达 1 小时，晚安提醒会明显迟到。
+        // 1. 有精确闹钟权限：最稳，窗口为 0
+        if (canScheduleExactAlarms(context)) {
+            val precise = runCatching {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            }
+            if (precise.isSuccess) return
+            Log.w(TAG, "setExactAndAllowWhileIdle 失败，回退闹钟通道", precise.exceptionOrNull())
+        }
+
+        // 2. 退而求其次：系统闹钟通道（部分 ROM 会静默降级为 1 小时窗口）
         val showIntent = PendingIntent.getActivity(
             context,
             REQUEST_CODE_OPEN,
@@ -64,18 +85,18 @@ object BedtimeReminderScheduler {
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val scheduled = runCatching {
+        val alarmClock = runCatching {
             alarmManager.setAlarmClock(
                 AlarmManager.AlarmClockInfo(triggerAt, showIntent),
                 pendingIntent
             )
-        }.isSuccess
+        }
+        if (alarmClock.isSuccess) return
+        Log.w(TAG, "setAlarmClock 失败，回退尽力准点", alarmClock.exceptionOrNull())
 
-        if (!scheduled) {
-            // 极少数 ROM 不支持 setAlarmClock 时降级为「尽力准点」，至少仍能提醒
-            runCatching {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-            }
+        // 3. 兜底：至少仍能提醒（可能延迟，最长 1 小时）
+        runCatching {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
         }
     }
 

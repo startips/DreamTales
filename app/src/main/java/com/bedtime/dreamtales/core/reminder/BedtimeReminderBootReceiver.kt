@@ -15,6 +15,18 @@ class BedtimeReminderBootReceiver : BroadcastReceiver() {
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> BedtimeReminderScheduler.schedule(context)
+
+            // 用户刚授予「闹钟和提醒」权限：立刻把提醒重排为精确闹钟
+            ACTION_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                if (BedtimeReminderScheduler.canScheduleExactAlarms(context)) {
+                    BedtimeReminderScheduler.schedule(context)
+                }
+            }
         }
+    }
+
+    companion object {
+        private const val ACTION_EXACT_ALARM_PERMISSION_STATE_CHANGED =
+            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
     }
 }
